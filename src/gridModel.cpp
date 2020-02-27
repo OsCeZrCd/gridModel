@@ -28,6 +28,7 @@ public:
     {
         double yieldStrain = 0.07 - 0.01 * s;
         return e.Modulus2() > yieldStrain*yieldStrain;
+        //return e.x[0]>yieldStrain;
     }
     GeometryVector eFromRearranger(double dx, double dy, double r)
     {
@@ -39,6 +40,7 @@ public:
 
         double theta = std::atan2(dy, dx);
         return magnitude * GeometryVector(std::cos(4 * theta), std::sin(4 * theta));
+        //return magnitude * GeometryVector(std::cos(4 * theta), 0.0);
     }
     double dsFromRearranger(double dx, double dy, double r)
     {
@@ -148,7 +150,7 @@ public:
                         {
                             //carry out the rearrangement
                             rearrangingStep[i]++;
-                            if (rearrangingStep[i] > 0)
+                            if (rearrangingStep[i] > 5)
                             {
                                 rearrangingStep[i] = 0;
                                 alle[i] = 0.0;
