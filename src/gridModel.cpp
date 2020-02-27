@@ -3,6 +3,8 @@
 #include <random>
 #include <cmath>
 
+#include "GeometryVector.h"
+
 class gridModel
 {
 public:
@@ -10,7 +12,8 @@ public:
     double lGrid;
     int bufferCenter;
 
-    std::vector<double> dEBuffer, dSBuffer, alle, alls; //e is strain
+    std::vector<double> dSBuffer, alls;
+    std::vector<GeometryVector> dEBuffer, alle; //e is strain
     std::vector<char> rearrangingStep;
     std::vector<bool> hasRearranged;
 
@@ -21,16 +24,21 @@ public:
     {
     }
 
-    bool startRearranging(double e, double s)
+    bool startRearranging(GeometryVector e, double s)
     {
-        return e > 0.07 - 0.01 * s;
+        double yieldStrain = 0.07 - 0.01 * s;
+        return e.Modulus2() > yieldStrain*yieldStrain;
     }
-    double eFromRearranger(double dx, double dy, double r)
+    GeometryVector eFromRearranger(double dx, double dy, double r)
     {
+        double magnitude;
         if (r < 1.0)
-            return 3e-2;
+            magnitude = 3e-2;
         else
-            return 3e-2 / r / r;
+            magnitude = 3e-2 / r / r;
+
+        double theta = std::atan2(dy, dx);
+        return magnitude * GeometryVector(std::cos(4 * theta), std::sin(4 * theta));
     }
     double dsFromRearranger(double dx, double dy, double r)
     {
@@ -78,7 +86,7 @@ public:
         int nSite = nGridPerSide * nGridPerSide;
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i] += 1e-5;
+            this->alle[i].x[0] += 1e-5;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
@@ -123,16 +131,16 @@ public:
                                 while (yInBuffer >= nGridPerSide)
                                     yInBuffer -= nGridPerSide;
                                 //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
-                                double & e = alle[x*nGridPerSide+y];
-                                double & de = dEBuffer[xInBuffer*nGridPerSide+yInBuffer];
-                                e=std::sqrt(e*e+de*de);
+                                GeometryVector &e = alle[x * nGridPerSide + y];
+                                GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+                                e.AddFrom(de);
                                 alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
                             }
                         }
                         numRearrange++;
                     }
                 }
-#pragma omp single 
+#pragma omp single
                 {
                     for (int i = 0; i < nSite; i++)
                     {
@@ -143,8 +151,8 @@ public:
                             if (rearrangingStep[i] > 0)
                             {
                                 rearrangingStep[i] = 0;
-                                alle[i]=0.0;
-                                alls[i]=distriBution(rEngine);
+                                alle[i] = 0.0;
+                                alls[i] = distriBution(rEngine);
                             }
                         }
                     }
