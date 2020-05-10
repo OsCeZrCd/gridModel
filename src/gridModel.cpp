@@ -30,8 +30,10 @@ public:
     bool startRearranging(GeometryVector e, double s)
     {
         double yieldStrain = 0.07 - 0.01 * s;
-        //return e.Modulus2() > yieldStrain*yieldStrain;
-        return e.x[0] > yieldStrain;
+        if (yieldStrain < 0.05)
+            yieldStrain = 0.05;
+        return e.Modulus2() > yieldStrain * yieldStrain;
+        //return e.x[0] > yieldStrain;
     }
     // GeometryVector eFromRearranger(double dx, double dy, double r)
     // {
@@ -256,7 +258,7 @@ public:
                         {
                             //carry out the rearrangement
                             rearrangingStep[i]++;
-                            if (rearrangingStep[i] > 5)
+                            if (rearrangingStep[i] > 4)
                             {
                                 rearrangingStep[i] = 0;
                                 alle[i] = 0.0;
@@ -268,7 +270,17 @@ public:
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-                        std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
+                        std::cout << "num rearranger in this frame=" << numRearrange;
+                        double sum = 0.0;
+                        for (auto &e : this->alle)
+                            sum += e.x[0];
+                        std::cout << ", mean e0=" << sum/alle.size();
+
+                        sum = 0.0;
+                        for (auto &s : this->alls)
+                            sum += s;
+                        std::cout << ", mean s=" << sum/alls.size();
+                        std::cout << std::endl;
                     }
                 }
             }
@@ -295,11 +307,11 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     //gr.Aspect(0.75, 1.0);
     //gr.Colorbar(">kbcyr");
     gr.Tile(x, "kbcyr");
-    gr.WritePNG((file+std::string(".png")).c_str());
+    gr.WritePNG((file + std::string(".png")).c_str());
 }
 int main()
 {
-    const int nGridPerSide=300;
+    const int nGridPerSide = 60;
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
@@ -315,7 +327,7 @@ int main()
             std::cout << numAvalanche << "avalanches so far.\n";
 
             std::stringstream ss;
-            ss<<"avalanche_"<<numAvalanche;
+            ss << "avalanche_" << numAvalanche;
             plot(model.hasRearranged, nGridPerSide, ss.str());
         }
     }
