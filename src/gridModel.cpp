@@ -21,9 +21,10 @@ public:
     std::vector<bool> hasRearranged;
 
     std::mt19937 rEngine;
-    std::normal_distribution<double> distriBution;
+    std::normal_distribution<double> sDistribution;
+    std::normal_distribution<double> eDistribution;
 
-    gridModel(int nGrid, double lGrid) : rEngine(0), distriBution(-2.0, 2.0), nGridPerSide(nGrid), lGrid(lGrid)
+    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), nGridPerSide(nGrid), lGrid(lGrid)
     {
     }
 
@@ -50,7 +51,7 @@ public:
     double dsFromRearranger(double dx, double dy, double r)
     {
         if (r < 4.0)
-            return -0.1;
+            return -0.03;
         else if (r < 30)
             return 1.0 / r / r / r;
         else
@@ -184,8 +185,9 @@ public:
         rearrangingStep.resize(nSite);
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i] = 0.0;
-            this->alls[i] = this->distriBution(this->rEngine);
+            this->alle[i].x[0] = this->eDistribution(this->rEngine);
+            this->alle[i].x[1] = this->eDistribution(this->rEngine);
+            this->alls[i] = this->sDistribution(this->rEngine);
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
@@ -217,6 +219,55 @@ public:
                         hasRearranged[i] = 1;
                         rearrangingStep[i] = 1;
                     }
+
+                //stop rearrangements that increases energy
+                for (int i = 0; i < nSite; i++)
+                {
+                    if (rearrangingStep[i] > 0)
+                    {
+                        //calculate energy difference
+                        double deltaEnergy = 0;
+                        int rx = i / nGridPerSide;
+                        int ry = i % nGridPerSide;
+#pragma omp for schedule(static)
+                        for (int x = 0; x < nGridPerSide; x++)
+                        {
+                            int xInBuffer = bufferCenter - rx + x;
+                            while (xInBuffer < 0)
+                                xInBuffer += nGridPerSide;
+                            while (xInBuffer >= nGridPerSide)
+                                xInBuffer -= nGridPerSide;
+                            for (int y = 0; y < nGridPerSide; y++)
+                            {
+                                int yInBuffer = bufferCenter - ry + y;
+                                while (yInBuffer < 0)
+                                    yInBuffer += nGridPerSide;
+                                while (yInBuffer >= nGridPerSide)
+                                    yInBuffer -= nGridPerSide;
+                                GeometryVector &e = alle[x * nGridPerSide + y];
+                                GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+
+                                if (ry != y || rx != x)
+                                    deltaEnergy += (e + de).Modulus2() - e.Modulus2();
+                                else
+                                    deltaEnergy -= e.Modulus2();
+                            }
+                        }
+
+#pragma omp single
+                        {
+                            //stop if energy increases
+                            if (deltaEnergy > 0)
+                            {
+                                //std::cout << "rearrangement at stage " << int(rearrangingStep[i]) << " refuted due to energy criteria\n";
+                                rearrangingStep[i] = 0;
+                            }
+                        }
+                    }
+                }
+
+#pragma omp barrier
+                //rearrangement affect other sites parameters
                 numRearrange = 0;
                 for (int i = 0; i < nSite; i++)
                 {
@@ -261,9 +312,9 @@ public:
                             if (rearrangingStep[i] > 4)
                             {
                                 rearrangingStep[i] = 0;
-                                alle[i] = 0.0;
-                                alls[i] = distriBution(rEngine);
                             }
+                            alle[i] = 0.0;
+                            alls[i] = sDistribution(rEngine);
                         }
                     }
 
@@ -273,13 +324,13 @@ public:
                         std::cout << "num rearranger in this frame=" << numRearrange;
                         double sum = 0.0;
                         for (auto &e : this->alle)
-                            sum += e.x[0];
-                        std::cout << ", mean e0=" << sum/alle.size();
+                            sum += e.Modulus2();
+                        std::cout << ", mean energy=" << sum / alle.size();
 
                         sum = 0.0;
                         for (auto &s : this->alls)
                             sum += s;
-                        std::cout << ", mean s=" << sum/alls.size();
+                        std::cout << ", mean s=" << sum / alls.size();
                         std::cout << std::endl;
                     }
                 }
@@ -311,7 +362,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 }
 int main()
 {
-    const int nGridPerSide = 60;
+    const int nGridPerSide = 100;
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
