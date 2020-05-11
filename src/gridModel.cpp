@@ -8,6 +8,27 @@
 #include "kiss_fftnd.h"
 #include "mgl2/mgl.h"
 
+template <typename T>
+void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
+{
+    mglData x(nGridPerSide, nGridPerSide);
+    for (int i = 0; i < nGridPerSide; i++)
+    {
+        for (int j = 0; j < nGridPerSide; j++)
+        {
+            x.SetVal(mreal(data[i * nGridPerSide + j]), i, j);
+            //std::cout<<data[i*nGridPerSide+j]<<" ";
+        }
+        //std::cout<<std::endl;
+    }
+    mglGraph gr;
+    gr.SetSize(1600, 1600);
+    //gr.Aspect(0.75, 1.0);
+    //gr.Colorbar(">kbcyr");
+    gr.Tile(x, "bkr");
+    gr.WritePNG((file + std::string(".png")).c_str());
+}
+
 class gridModel
 {
 public:
@@ -203,10 +224,11 @@ public:
             this->rearrangingStep[i] = 0;
         }
     }
-    bool avalanche()
+    bool avalanche(std::string outputPrefix="")
     {
         bool avalancheHappened = false;
         int nSite = nGridPerSide * nGridPerSide;
+        int nStep=0;
 #pragma omp parallel
         {
             int numRearrange = 1;
@@ -332,6 +354,13 @@ public:
                             sum += s;
                         std::cout << ", mean s=" << sum / alls.size();
                         std::cout << std::endl;
+
+                        if(outputPrefix!=std::string(""))
+                        {
+                            std::stringstream ss;
+                            ss<<outputPrefix<<"_step_"<<(nStep++);
+                            plot(this->rearrangingStep, nGridPerSide, ss.str());
+                        }
                     }
                 }
             }
@@ -340,26 +369,6 @@ public:
     }
 };
 
-template <typename T>
-void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
-{
-    mglData x(nGridPerSide, nGridPerSide);
-    for (int i = 0; i < nGridPerSide; i++)
-    {
-        for (int j = 0; j < nGridPerSide; j++)
-        {
-            x.SetVal(mreal(data[i * nGridPerSide + j]), i, j);
-            //std::cout<<data[i*nGridPerSide+j]<<" ";
-        }
-        //std::cout<<std::endl;
-    }
-    mglGraph gr;
-    gr.SetSize(1600, 1600);
-    //gr.Aspect(0.75, 1.0);
-    //gr.Colorbar(">kbcyr");
-    gr.Tile(x, "kbcyr");
-    gr.WritePNG((file + std::string(".png")).c_str());
-}
 int main()
 {
     const int nGridPerSide = 100;
@@ -371,14 +380,15 @@ int main()
         //std::cout << "shearing\n";
         model.shear();
         //std::cout << "checking avalanche\n";
-        bool avalanched = model.avalanche();
+
+        std::stringstream ss;
+        ss << "avalanche_" << numAvalanche;
+
+        bool avalanched = model.avalanche(ss.str());
         numAvalanche += avalanched;
         if (avalanched)
         {
             std::cout << numAvalanche << "avalanches so far.\n";
-
-            std::stringstream ss;
-            ss << "avalanche_" << numAvalanche;
             plot(model.hasRearranged, nGridPerSide, ss.str());
         }
     }
