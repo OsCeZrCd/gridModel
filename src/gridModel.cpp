@@ -74,7 +74,7 @@ public:
         if (r < 4.0)
             return -0.03;
         else if (r < 30)
-            return 1.0 / r / r / r;
+            return 1.0 / r / r / r - 0.16/r/r*std::sin(2.0*std::atan2(dy, dx));
         else
             return 0.0;
     }
@@ -243,6 +243,7 @@ public:
                     }
 
                 //stop rearrangements that increases energy
+#pragma omp for schedule(static)
                 for (int i = 0; i < nSite; i++)
                 {
                     if (rearrangingStep[i] > 0)
@@ -251,7 +252,6 @@ public:
                         double deltaEnergy = 0;
                         int rx = i / nGridPerSide;
                         int ry = i % nGridPerSide;
-#pragma omp for schedule(static)
                         for (int x = 0; x < nGridPerSide; x++)
                         {
                             int xInBuffer = bufferCenter - rx + x;
@@ -276,9 +276,9 @@ public:
                             }
                         }
 
-#pragma omp single
                         {
                             //stop if energy increases
+                            // std::cout<<"de= "<<deltaEnergy<<' ';
                             if (deltaEnergy > 0)
                             {
                                 //std::cout << "rearrangement at stage " << int(rearrangingStep[i]) << " refuted due to energy criteria\n";
@@ -375,7 +375,7 @@ int main()
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
-    while (numAvalanche < 5000)
+    while (numAvalanche < 50000)
     {
         //std::cout << "shearing\n";
         model.shear();
@@ -392,6 +392,6 @@ int main()
             plot(model.hasRearranged, nGridPerSide, ss.str());
         }
     }
-    //for (auto &s : model.alls)
-    //    std::cout << s << std::endl;
+    for (auto &s : model.alls)
+        std::cout << s << std::endl;
 }
