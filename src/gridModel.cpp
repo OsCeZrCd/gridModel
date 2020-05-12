@@ -229,6 +229,7 @@ public:
         bool avalancheHappened = false;
         int nSite = nGridPerSide * nGridPerSide;
         int nStep=0;
+        double deltaEnergy;
 #pragma omp parallel
         {
             int numRearrange = 1;
@@ -243,15 +244,16 @@ public:
                     }
 
                 //stop rearrangements that increases energy
-#pragma omp for schedule(static)
                 for (int i = 0; i < nSite; i++)
                 {
                     if (rearrangingStep[i] > 0)
                     {
                         //calculate energy difference
-                        double deltaEnergy = 0;
+                        deltaEnergy = 0;
                         int rx = i / nGridPerSide;
                         int ry = i % nGridPerSide;
+#pragma omp barrier
+#pragma omp for schedule(static) reduction(+:deltaEnergy)
                         for (int x = 0; x < nGridPerSide; x++)
                         {
                             int xInBuffer = bufferCenter - rx + x;
@@ -275,7 +277,7 @@ public:
                                     deltaEnergy -= e.Modulus2();
                             }
                         }
-
+#pragma omp single
                         {
                             //stop if energy increases
                             // std::cout<<"de= "<<deltaEnergy<<' ';
