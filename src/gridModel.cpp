@@ -11,22 +11,22 @@
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 {
-    mglData x(nGridPerSide, nGridPerSide);
-    for (int i = 0; i < nGridPerSide; i++)
-    {
-        for (int j = 0; j < nGridPerSide; j++)
-        {
-            x.SetVal(mreal(data[i * nGridPerSide + j]), i, j);
-            //std::cout<<data[i*nGridPerSide+j]<<" ";
-        }
-        //std::cout<<std::endl;
-    }
-    mglGraph gr;
-    gr.SetSize(1600, 1600);
-    //gr.Aspect(0.75, 1.0);
-    //gr.Colorbar(">kbcyr");
-    gr.Tile(x, "bkr");
-    gr.WritePNG((file + std::string(".png")).c_str());
+    // mglData x(nGridPerSide, nGridPerSide);
+    // for (int i = 0; i < nGridPerSide; i++)
+    // {
+    //     for (int j = 0; j < nGridPerSide; j++)
+    //     {
+    //         x.SetVal(mreal(data[i * nGridPerSide + j]), i, j);
+    //         //std::cout<<data[i*nGridPerSide+j]<<" ";
+    //     }
+    //     //std::cout<<std::endl;
+    // }
+    // mglGraph gr;
+    // gr.SetSize(1600, 1600);
+    // //gr.Aspect(0.75, 1.0);
+    // //gr.Colorbar(">kbcyr");
+    // gr.Tile(x, "bkr");
+    // gr.WritePNG((file + std::string(".png")).c_str());
 }
 
 class gridModel
@@ -219,7 +219,7 @@ public:
         int nSite = nGridPerSide * nGridPerSide;
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i].x[0] += 1e-5;
+            this->alle[i].x[0] += 1e-6;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
@@ -373,7 +373,7 @@ public:
 
 int main()
 {
-    const int nGridPerSide = 100;
+    const int nGridPerSide = 1000;
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
