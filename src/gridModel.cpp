@@ -74,7 +74,7 @@ public:
         if (r < 4.0)
             return -0.03;
         else if (r < 30)
-            return 1.0 / r / r / r - 0.16/r/r*std::sin(2.0*std::atan2(dy, dx));
+            return 1.0 / r / r / r - 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
         else
             return 0.0;
     }
@@ -217,6 +217,7 @@ public:
     void shear()
     {
         int nSite = nGridPerSide * nGridPerSide;
+#pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
             this->alle[i].x[0] += 1e-6;
@@ -224,11 +225,11 @@ public:
             this->rearrangingStep[i] = 0;
         }
     }
-    bool avalanche(std::string outputPrefix="")
+    bool avalanche(std::string outputPrefix = "")
     {
         bool avalancheHappened = false;
         int nSite = nGridPerSide * nGridPerSide;
-        int nStep=0;
+        int nStep = 0;
         double deltaEnergy;
 #pragma omp parallel
         {
@@ -253,7 +254,8 @@ public:
                         int rx = i / nGridPerSide;
                         int ry = i % nGridPerSide;
 #pragma omp barrier
-#pragma omp for schedule(static) reduction(+:deltaEnergy)
+#pragma omp for schedule(static) reduction(+ \
+                                           : deltaEnergy)
                         for (int x = 0; x < nGridPerSide; x++)
                         {
                             int xInBuffer = bufferCenter - rx + x;
@@ -357,10 +359,10 @@ public:
                         std::cout << ", mean s=" << sum / alls.size();
                         std::cout << std::endl;
 
-                        if(outputPrefix!=std::string(""))
+                        if (outputPrefix != std::string(""))
                         {
                             std::stringstream ss;
-                            ss<<outputPrefix<<"_step_"<<(nStep++);
+                            ss << outputPrefix << "_step_" << (nStep++);
                             plot(this->rearrangingStep, nGridPerSide, ss.str());
                         }
                     }
@@ -377,7 +379,7 @@ int main()
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
-    while (numAvalanche < 50000)
+    while (numAvalanche < 100)
     {
         //std::cout << "shearing\n";
         model.shear();
@@ -394,6 +396,6 @@ int main()
             plot(model.hasRearranged, nGridPerSide, ss.str());
         }
     }
-    for (auto &s : model.alls)
-        std::cout << s << std::endl;
+    // for (auto &s : model.alls)
+    //     std::cout << s << std::endl;
 }
