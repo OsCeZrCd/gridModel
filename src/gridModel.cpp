@@ -335,10 +335,10 @@ public:
                         {
                             //carry out the rearrangement
                             rearrangingStep[i]++;
-                            if (rearrangingStep[i] > 4)
-                            {
-                                rearrangingStep[i] = 0;
-                            }
+                            // if (rearrangingStep[i] > 4)
+                            // {
+                            //     rearrangingStep[i] = 0;
+                            // }
                             alle[i] = 0.0;
                             alls[i] = sDistribution(rEngine);
                         }
@@ -379,7 +379,7 @@ int main()
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
-    while (numAvalanche < 100)
+    while (numAvalanche < 100000)
     {
         //std::cout << "shearing\n";
         model.shear();
