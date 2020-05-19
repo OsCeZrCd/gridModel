@@ -2,7 +2,7 @@
 #define GEOMETRYVECTOR_INCLUDED
 
 typedef int DimensionType;
-const DimensionType MaxDimension=2;
+const DimensionType MaxDimension=4;
 
 #include <cstring>
 #include <cassert>

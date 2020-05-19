@@ -2,11 +2,12 @@
 #include <vector>
 #include <random>
 #include <cmath>
+#include <sstream>
 
 #include "GeometryVector.h"
 #include "kiss_fft.h"
 #include "kiss_fftnd.h"
-#include "mgl2/mgl.h"
+//#include "mgl2/mgl.h"
 
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
