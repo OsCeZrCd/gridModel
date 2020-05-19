@@ -94,6 +94,13 @@ public:
                 dSBuffer[index] = dsFromRearranger(dx, dy, r);
             }
 
+        //require that dsBuffer sums to zero
+        double sum=0.0;
+        for (auto ds : dSBuffer)
+           sum+=ds;
+        dSBuffer[bufferCenter*nGridPerSide+bufferCenter] -= sum;
+        std::cout<<"rearranger ds="<<dSBuffer[bufferCenter*nGridPerSide+bufferCenter]<<std::endl;
+
         double factor;
         {
             //strain buffer calculated by Fourier transform
@@ -340,7 +347,7 @@ public:
                             //     rearrangingStep[i] = 0;
                             // }
                             alle[i] = 0.0;
-                            alls[i] = sDistribution(rEngine);
+                            //alls[i] = sDistribution(rEngine);
                         }
                     }
 
@@ -375,7 +382,7 @@ public:
 
 int main()
 {
-    const int nGridPerSide = 1000;
+    const int nGridPerSide = 500;
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
