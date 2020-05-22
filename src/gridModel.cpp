@@ -33,22 +33,76 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 class gridModel
 {
 public:
-    int nGridPerSide;
-    double lGrid;
-    int bufferCenter;
+  int nGridPerSide;
+  double lGrid;
+  int d;
+  int bufferCenter;
 
-    std::vector<double> dSBuffer, alls;
-    std::vector<GeometryVector> dEBuffer, alle; //e is strain
-    std::vector<char> rearrangingStep;
-    std::vector<bool> hasRearranged;
+  std::vector<double> dSBuffer, alls;
+  std::vector<GeometryVector> dEBuffer, alle; //e is strain
+  std::vector<char> rearrangingStep;
+  std::vector<bool> hasRearranged;
 
-    std::mt19937 rEngine;
-    std::normal_distribution<double> sDistribution;
-    std::normal_distribution<double> eDistribution;
+  std::mt19937 rEngine;
+  std::normal_distribution<double> eDistribution;
+  std::normal_distribution<double> sDistribution;
 
-    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), nGridPerSide(nGrid), lGrid(lGrid)
-    {
-    }
+
+  /********************************************************************
+   * gridModel
+   *
+   * Initializes model variables.
+   *
+   * Parameters
+   * ----------
+   *  nGrid : int
+   *    Number of grid points on each side of the box
+   *  lGrid : double
+   *    Length of the side of each grid point
+   *  d : int
+   *    Dimension of the box
+   *  eDistribution : std::normal_distribution<double>
+   *    distribution of initial strains (e)
+   *  sDistribution : std::normal_distribution<double>
+   *    distribution of initial softnesses (S)
+   *******************************************************************/
+  gridModel(int nGrid, double lGrid, int d, 
+        std::normal_distribution<double> eDist, 
+        std::normal_distribution<double> sDist) : rEngine(0), 
+        nGridPerSide(nGrid), lGrid(lGrid), d(d), eDistribution(eDist),
+        sDistribution(sDist)
+  {
+  }
+
+  /********************************************************************
+   * initialize
+   *
+   * Initializes initial strains and softnesses for model according to
+   * given distribution.
+   *
+   *******************************************************************/
+  void initialize()
+  {   
+    int nSite = nGridPerSide * nGridPerSide;
+    alle.resize(nSite);
+    alls.resize(nSite);
+    hasRearranged.resize(nSite);
+    rearrangingStep.resize(nSite);
+    for (int i = 0; i < nSite; i++)
+    {   
+      this->alle[i].x[0] = this->eDistribution(this->rEngine);
+      this->alle[i].x[1] = this->eDistribution(this->rEngine);
+      this->alls[i] = this->sDistribution(this->rEngine);
+      this->hasRearranged[i] = 0;
+      this->rearrangingStep[i] = 0;
+    }   
+    this->getBuffer();
+  } 
+
+
+
+
+
 
     bool startRearranging(GeometryVector e, double s)
     {
@@ -376,27 +430,43 @@ public:
 
 int main()
 {
-    const int nGridPerSide = 1000;
-    gridModel model(nGridPerSide, 1.0);
-    model.initialize();
-    int numAvalanche = 0;
-    while (numAvalanche < 100)
+
+  // Sets: 
+  //   - number of grid points per side (nGridPerSide)
+  //   - length of each grid side (lenGridSide)
+  //   - dimensionality of the space (d)
+  const int nGridPerSide = 200;
+  const double lenGridSide = 1.0;
+  const int d = 3;
+  std::normal_distribution<double> eDistribution(0.0, 0.01);
+  std::normal_distribution<double> sDistribution(-2.0, 1.0);
+
+  // Declares a grid model with:
+  //   - nGridPerSide grid points on each side
+  //   - lenGridSide grid side length
+  //   - d dimensionality
+  //   - eDistribution initial distribution of strains
+  //   - sDistribution initial distribution of softnesses
+  // Initializes model.
+  gridModel model(nGridPerSide, lenGridSide, d, eDistribution, 
+        sDistribution);
+  model.initialize();
+
+
+  int numAvalanche = 0;
+  while (numAvalanche < 100)
+  {
+    model.shear();
+
+    std::stringstream ss;
+    ss << "avalanche_" << numAvalanche;
+
+    bool avalanched = model.avalanche(ss.str());
+    numAvalanche += avalanched;
+    if (avalanched)
     {
-        //std::cout << "shearing\n";
-        model.shear();
-        //std::cout << "checking avalanche\n";
-
-        std::stringstream ss;
-        ss << "avalanche_" << numAvalanche;
-
-        bool avalanched = model.avalanche(ss.str());
-        numAvalanche += avalanched;
-        if (avalanched)
-        {
-            std::cout << numAvalanche << "avalanches so far.\n";
-            plot(model.hasRearranged, nGridPerSide, ss.str());
-        }
+      std::cout << numAvalanche << "avalanches so far.\n";
+      plot(model.hasRearranged, nGridPerSide, ss.str());
     }
-    // for (auto &s : model.alls)
-    //     std::cout << s << std::endl;
+  }
 }
