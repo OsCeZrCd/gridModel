@@ -2,6 +2,7 @@
 #include <vector>
 #include <random>
 #include <cmath>
+#include <fstream>
 
 #include "GeometryVector.h"
 #include "kiss_fft.h"
@@ -11,7 +12,8 @@
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 {
-    // mglData x(nGridPerSide, nGridPerSide);
+    // mglData x(nGridPerSide , nGridPerSide);
+    //
     // for (int i = 0; i < nGridPerSide; i++)
     // {
     //     for (int j = 0; j < nGridPerSide; j++)
@@ -27,6 +29,39 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     // //gr.Colorbar(">kbcyr");
     // gr.Tile(x, "bkr");
     // gr.WritePNG((file + std::string(".png")).c_str());
+}
+
+template <typename T>
+void writebinary(const std::vector<T> &data, int nGridPerSide, std::string file)
+{
+  std::ofstream re_data;
+  re_data.open ("data_hasRe.bin", std::ios::out | std::ios::binary | std::fstream::app);
+
+  int nsum = nGridPerSide*nGridPerSide;
+ // int nsum = 114;
+  re_data.write((char*)&nsum,sizeof(int));
+
+  int total_re = 0;
+
+  for (int i = 0; i < nsum; i++)
+  {
+      // for (int j = 0; j < nGridPerSide; j++)
+      // {
+
+        if (data[i]==1){
+          int gindex=1;
+          re_data.write((char*)&gindex,sizeof(int));
+          total_re += 1;
+         }else
+         {
+          int gindex=0;
+          re_data.write((char*)&gindex,sizeof(int));
+         }
+      // }
+  }
+  std::cout<< "rearrangement written: " << total_re <<std::endl;
+  re_data.close();
+
 }
 
 class gridModel
@@ -45,15 +80,15 @@ public:
     std::normal_distribution<double> sDistribution;
     std::normal_distribution<double> eDistribution;
 
-    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), nGridPerSide(nGrid), lGrid(lGrid)
+    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.000001), sDistribution(-0.2, 2.0), nGridPerSide(nGrid), lGrid(lGrid)
     {
     }
 
     bool startRearranging(GeometryVector e, double s)
     {
-        double yieldStrain = 0.07 - 0.01 * s;
-        if (yieldStrain < 0.05)
-            yieldStrain = 0.05;
+        double yieldStrain = 0.003 - 0.001 * s;
+        if (yieldStrain < 0.0015)
+            yieldStrain = 0.0015;
         return e.Modulus2() > yieldStrain * yieldStrain;
         //return e.x[0] > yieldStrain;
     }
@@ -72,16 +107,16 @@ public:
     double dsFromRearranger(double dx, double dy, double r)
     {
         if (r < 4.0)
-            return -0.03;
+             return 0.001;
         else if (r < 30)
-            return 1.0 / r / r / r - 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
+            return 0.2*1.0 / r / r / r - 0.2*0.16 / r / r * (std::sin(2.0 * std::atan2(dy, dx)));
         else
             return 0.0;
     }
-    void getBuffer()
+    void getBuffer()  //assume effect from all rearrangements are the same, so only need once
     {
         bufferCenter = nGridPerSide / 2;
-        dEBuffer.resize(nGridPerSide * nGridPerSide);
+        dEBuffer.resize(nGridPerSide * nGridPerSide); // vector of doubles
         dSBuffer.resize(nGridPerSide * nGridPerSide);
         for (int i = 0; i < nGridPerSide; i++)
             for (int j = 0; j < nGridPerSide; j++)
@@ -120,7 +155,7 @@ public:
             kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
             kiss_fftnd(st, inbuf, outbuf);
             //fill in dEBuffer
-            factor = 0.02 / std::fabs(outbuf[0].r);
+            factor = 0.0005 / std::fabs(outbuf[0].r);
 
             for (int i = 0; i < nGridPerSide; i++)
                 for (int j = 0; j < nGridPerSide; j++)
@@ -206,39 +241,51 @@ public:
         rearrangingStep.resize(nSite);
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i].x[0] = this->eDistribution(this->rEngine);
+            this->alle[i].x[0] = this->eDistribution(this->rEngine); //initialize strain with a distrbution e with a random number generator
             this->alle[i].x[1] = this->eDistribution(this->rEngine);
-            this->alls[i] = this->sDistribution(this->rEngine);
+            this->alls[i] = this->sDistribution(this->rEngine); //initialize softness with a distrbution s
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
         this->getBuffer();
     }
+
+
+
+
     void shear()
     {
         int nSite = nGridPerSide * nGridPerSide;
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i].x[0] += 1e-6;
+            this->alle[i].x[0] += 0.5e-6;
+            this->alle[i].x[1] += 0.5e-6;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
     }
-    bool avalanche(std::string outputPrefix = "")
+
+
+
+
+    int avalanche(std::string outputPrefix = "")
     {
         bool avalancheHappened = false;
         int nSite = nGridPerSide * nGridPerSide;
         int nStep = 0;
         double deltaEnergy;
+        // int loopnum = 0;
+        int numRearrange = 0;
 #pragma omp parallel
         {
-            int numRearrange = 1;
-            while (numRearrange > 0)
-            {
+            // int loopnum = 0;
+            //
+            // while (loopnum == 0)
+            // {
 #pragma omp for schedule(static)
                 for (int i = 0; i < nSite; i++)
-                    if (startRearranging(alle[i], alls[i]))
+                    if (startRearranging(alle[i], alls[i]))   // if yield strain cross rearrangement barrier
                     {
                         hasRearranged[i] = 1;
                         rearrangingStep[i] = 1;
@@ -287,6 +334,7 @@ public:
                             {
                                 //std::cout << "rearrangement at stage " << int(rearrangingStep[i]) << " refuted due to energy criteria\n";
                                 rearrangingStep[i] = 0;
+                                hasRearranged[i] = 0;
                             }
                         }
                     }
@@ -324,7 +372,7 @@ public:
                                 alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
                             }
                         }
-                        numRearrange++;
+
                     }
                 }
 #pragma omp single
@@ -334,52 +382,61 @@ public:
                         if (rearrangingStep[i] > 0)
                         {
                             //carry out the rearrangement
-                            rearrangingStep[i]++;
+                            // rearrangingStep[i]++;
                             // if (rearrangingStep[i] > 4)
                             // {
                             //     rearrangingStep[i] = 0;
                             // }
-                            alle[i] = 0.0;
-                            alls[i] = sDistribution(rEngine);
+                            // finite lifetime
+                            double dissp_factor = 0;
+                            alle[i].x[0] = alle[i].x[0] *  dissp_factor;
+                            alle[i].x[1] = alle[i].x[1] *  dissp_factor;
+                            alls[i] = alls[i] + (-0.2 * alls[i] + 0.05) * (1-dissp_factor);
+                            numRearrange++;
+                            //alls[i] = sDistribution(rEngine);
+                            //rearrangingStep[i] = 0;
                         }
                     }
 
-                    if (numRearrange > 0)
-                    {
-                        avalancheHappened = true;
-                        std::cout << "num rearranger in this frame=" << numRearrange;
-                        double sum = 0.0;
-                        for (auto &e : this->alle)
-                            sum += e.Modulus2();
-                        std::cout << ", mean energy=" << sum / alle.size();
+                    // if (numRearrange > 0)
+                    // {
+                        // avalancheHappened = true;
+                        // std::cout << "num rearranger in this frame=" << numRearrange;
+                        // double sum = 0.0;
+                        // for (auto &e : this->alle)
+                        //     sum += e.Modulus2();
+                        // std::cout << ", mean energy=" << sum / alle.size();
 
-                        sum = 0.0;
-                        for (auto &s : this->alls)
-                            sum += s;
-                        std::cout << ", mean s=" << sum / alls.size();
-                        std::cout << std::endl;
+                        // double sum = 0.0;
+                        // for (auto &s : this->alls)
+                        //     sum += s;
+                        // std::cout << ", mean s=" << sum / alls.size();
+                        // std::cout << std::endl;
 
-                        if (outputPrefix != std::string(""))
-                        {
-                            std::stringstream ss;
-                            ss << outputPrefix << "_step_" << (nStep++);
-                            plot(this->rearrangingStep, nGridPerSide, ss.str());
-                        }
-                    }
+                        // if (outputPrefix != std::string(""))
+                        // {
+                        //     std::stringstream ss;
+                        //     ss << outputPrefix << "_step_" << (nStep++);
+                        //     plot(this->rearrangingStep, nGridPerSide, ss.str());
+                        // }
+                    // }
                 }
-            }
+                // loopnum+=1;
+            // }
         }
-        return avalancheHappened;
+        return numRearrange;
     }
 };
 
 int main()
 {
-    const int nGridPerSide = 1000;
+    const int nGridPerSide = 500;
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
-    int numAvalanche = 0;
-    while (numAvalanche < 100000)
+   int numAvalanche = 0;
+//    while (numAvalanche < 100)
+   int strainstep = 0;
+   while (strainstep<1000000)
     {
         //std::cout << "shearing\n";
         model.shear();
@@ -388,13 +445,28 @@ int main()
         std::stringstream ss;
         ss << "avalanche_" << numAvalanche;
 
-        bool avalanched = model.avalanche(ss.str());
-        numAvalanche += avalanched;
-        if (avalanched)
+        int numRe = model.avalanche(ss.str());
+        // numAvalanche += avalanched;
+        // if (avalanched)
+        // {
+            // std::cout << numAvalanche << "avalanches so far.\n";
+          //  plot(model.hasRearranged, nGridPerSide, ss.str());
+        if (strainstep%100==0)
         {
-            std::cout << numAvalanche << "avalanches so far.\n";
-            plot(model.hasRearranged, nGridPerSide, ss.str());
+
+        double sum = 0.0;
+        for (auto &s : model.alls)
+           sum += s;
+
+        //writebinary(model.hasRearranged, nGridPerSide, ss.str());
+        writebinary<bool>(model.hasRearranged, nGridPerSide, ss.str());
+        std::cout << "Currently at step: " << strainstep << ", Number of rearrangement:"<<  numRe;
+        std::cout << ", mean s=" << sum / model.alls.size() << std::endl;
         }
+
+        strainstep+=1;
+
+        // }
     }
     // for (auto &s : model.alls)
     //     std::cout << s << std::endl;
