@@ -38,26 +38,23 @@ void writebinary(const std::vector<T> &data, int nGridPerSide, std::string file)
   re_data.open ("data_hasRe.bin", std::ios::out | std::ios::binary | std::fstream::app);
 
   int nsum = nGridPerSide*nGridPerSide;
- // int nsum = 114;
-  re_data.write((char*)&nsum,sizeof(int));
-
   int total_re = 0;
+  for (int i = 0; i < nsum; i++)
+  {
+      if (data[i]==1){
+          total_re +=1;
+      }
+  }
+  re_data.write((char*)&total_re,sizeof(int));
 
   for (int i = 0; i < nsum; i++)
   {
-      // for (int j = 0; j < nGridPerSide; j++)
-      // {
 
         if (data[i]==1){
-          int gindex=1;
-          re_data.write((char*)&gindex,sizeof(int));
-          total_re += 1;
-         }else
-         {
-          int gindex=0;
+          int gindex=i;
           re_data.write((char*)&gindex,sizeof(int));
          }
-      // }
+
   }
   std::cout<< "rearrangement written: " << total_re <<std::endl;
   re_data.close();
@@ -251,16 +248,14 @@ public:
     }
 
 
-
-
     void shear()
     {
         int nSite = nGridPerSide * nGridPerSide;
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i].x[0] += 0.5e-6;
-            this->alle[i].x[1] += 0.5e-6;
+            this->alle[i].x[0] += 1.0e-6;
+            this->alle[i].x[1] += 0.0e-6;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
@@ -306,17 +301,21 @@ public:
                         for (int x = 0; x < nGridPerSide; x++)
                         {
                             int xInBuffer = bufferCenter - rx + x;
-                            while (xInBuffer < 0)
-                                xInBuffer += nGridPerSide;
-                            while (xInBuffer >= nGridPerSide)
-                                xInBuffer -= nGridPerSide;
+                            // while (xInBuffer < 0)
+                                // xInBuffer += nGridPerSide;
+                            // while (xInBuffer >= nGridPerSide)
+                                // xInBuffer -= nGridPerSide;
+                            if (xInBuffer>=0 && xInBuffer<nGridPerSide)
+                            {
                             for (int y = 0; y < nGridPerSide; y++)
                             {
                                 int yInBuffer = bufferCenter - ry + y;
-                                while (yInBuffer < 0)
-                                    yInBuffer += nGridPerSide;
-                                while (yInBuffer >= nGridPerSide)
-                                    yInBuffer -= nGridPerSide;
+                                // while (yInBuffer < 0)
+                                    // yInBuffer += nGridPerSide;
+                                // while (yInBuffer >= nGridPerSide)
+                                    // yInBuffer -= nGridPerSide;
+                                if (yInBuffer>=0 && yInBuffer<nGridPerSide)
+                                {
                                 GeometryVector &e = alle[x * nGridPerSide + y];
                                 GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
 
@@ -324,6 +323,8 @@ public:
                                     deltaEnergy += (e + de).Modulus2() - e.Modulus2();
                                 else
                                     deltaEnergy -= e.Modulus2();
+                                }
+                            }
                             }
                         }
 #pragma omp single
@@ -354,22 +355,28 @@ public:
                         for (int x = 0; x < nGridPerSide; x++)
                         {
                             int xInBuffer = bufferCenter - rx + x;
-                            while (xInBuffer < 0)
-                                xInBuffer += nGridPerSide;
-                            while (xInBuffer >= nGridPerSide)
-                                xInBuffer -= nGridPerSide;
+                            // while (xInBuffer < 0)
+                                // xInBuffer += nGridPerSide;
+                            // while (xInBuffer >= nGridPerSide)
+                                // xInBuffer -= nGridPerSide;
+                            if (xInBuffer>=0 && xInBuffer<nGridPerSide)
+                            {
                             for (int y = 0; y < nGridPerSide; y++)
                             {
                                 int yInBuffer = bufferCenter - ry + y;
-                                while (yInBuffer < 0)
-                                    yInBuffer += nGridPerSide;
-                                while (yInBuffer >= nGridPerSide)
-                                    yInBuffer -= nGridPerSide;
+                                // while (yInBuffer < 0)
+                                    // yInBuffer += nGridPerSide;
+                                // while (yInBuffer >= nGridPerSide)
+                                    // yInBuffer -= nGridPerSide;
                                 //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+                                if (yInBuffer>=0 && yInBuffer<nGridPerSide)
+                                {
                                 GeometryVector &e = alle[x * nGridPerSide + y];
                                 GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
                                 e.AddFrom(de);
                                 alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
+                                }
+                            }
                             }
                         }
 
@@ -436,6 +443,10 @@ int main()
    int numAvalanche = 0;
 //    while (numAvalanche < 100)
    int strainstep = 0;
+
+   // std::vector<bool> hasRearranged_collect;
+   // hasRearranged_collect.assign(0, nGridPerSide*nGridPerSide);
+
    while (strainstep<1000000)
     {
         //std::cout << "shearing\n";
@@ -446,13 +457,16 @@ int main()
         ss << "avalanche_" << numAvalanche;
 
         int numRe = model.avalanche(ss.str());
+
+
+
         // numAvalanche += avalanched;
         // if (avalanched)
         // {
             // std::cout << numAvalanche << "avalanches so far.\n";
           //  plot(model.hasRearranged, nGridPerSide, ss.str());
-        if (strainstep%100==0)
-        {
+        // if (strainstep%25==0)
+        // {
 
         double sum = 0.0;
         for (auto &s : model.alls)
@@ -462,7 +476,7 @@ int main()
         writebinary<bool>(model.hasRearranged, nGridPerSide, ss.str());
         std::cout << "Currently at step: " << strainstep << ", Number of rearrangement:"<<  numRe;
         std::cout << ", mean s=" << sum / model.alls.size() << std::endl;
-        }
+        // }
 
         strainstep+=1;
 
