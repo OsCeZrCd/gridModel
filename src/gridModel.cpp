@@ -45,31 +45,22 @@ public:
     std::normal_distribution<double> sDistribution;
     std::normal_distribution<double> eDistribution;
 
-    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), nGridPerSide(nGrid), lGrid(lGrid)
+    std::exponential_distribution<double> coeffDistribution;
+    std::vector<double> yieldStrainCoeff;
+
+    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), coeffDistribution(1.0), nGridPerSide(nGrid), lGrid(lGrid)
     {
     }
 
-    bool startRearranging(GeometryVector e, double s)
+    bool startRearranging(GeometryVector e, double s, int i)
     {
         double yieldStrain = 0.07 - 0.01 * s;
         if (yieldStrain < 0.05)
             yieldStrain = 0.05;
+        yieldStrain*=yieldStrainCoeff[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
-        //return e.x[0] > yieldStrain;
     }
-    // GeometryVector eFromRearranger(double dx, double dy, double r)
-    // {
-    //     double magnitude;
-    //     if (r < 1.0)
-    //         magnitude = 3e-2;
-    //     else
-    //         magnitude = 3e-2 / r / r;
-
-    //     double theta = std::atan2(dy, dx);
-    //     return magnitude * GeometryVector(std::cos(4 * theta), std::sin(4 * theta));
-    //     //return magnitude * GeometryVector(std::cos(4 * theta), 0.0);
-    // }
-    double dsFromRearranger(double dx, double dy, double r)
+     double dsFromRearranger(double dx, double dy, double r)
     {
         if (r < 4.0)
             return -0.03;
@@ -202,6 +193,7 @@ public:
         int nSite = nGridPerSide * nGridPerSide;
         alle.resize(nSite);
         alls.resize(nSite);
+        yieldStrainCoeff.resize(nSite);
         hasRearranged.resize(nSite);
         rearrangingStep.resize(nSite);
         for (int i = 0; i < nSite; i++)
@@ -209,6 +201,7 @@ public:
             this->alle[i].x[0] = this->eDistribution(this->rEngine);
             this->alle[i].x[1] = this->eDistribution(this->rEngine);
             this->alls[i] = this->sDistribution(this->rEngine);
+            this->yieldStrainCoeff[i] = this->coeffDistribution(this->rEngine);
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
@@ -238,7 +231,7 @@ public:
             {
 #pragma omp for schedule(static)
                 for (int i = 0; i < nSite; i++)
-                    if (startRearranging(alle[i], alls[i]))
+                    if (startRearranging(alle[i], alls[i], i))
                     {
                         hasRearranged[i] = 1;
                         rearrangingStep[i] = 1;
@@ -341,6 +334,7 @@ public:
                             // }
                             alle[i] = 0.0;
                             alls[i] = sDistribution(rEngine);
+                            yieldStrainCoeff[i] = coeffDistribution(rEngine);
                         }
                     }
 
