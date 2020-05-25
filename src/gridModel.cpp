@@ -11,22 +11,22 @@
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 {
-    // mglData x(nGridPerSide, nGridPerSide);
-    // for (int i = 0; i < nGridPerSide; i++)
-    // {
-    //     for (int j = 0; j < nGridPerSide; j++)
-    //     {
-    //         x.SetVal(mreal(data[i * nGridPerSide + j]), i, j);
-    //         //std::cout<<data[i*nGridPerSide+j]<<" ";
-    //     }
-    //     //std::cout<<std::endl;
-    // }
-    // mglGraph gr;
-    // gr.SetSize(1600, 1600);
-    // //gr.Aspect(0.75, 1.0);
-    // //gr.Colorbar(">kbcyr");
-    // gr.Tile(x, "bkr");
-    // gr.WritePNG((file + std::string(".png")).c_str());
+    mglData x(nGridPerSide, nGridPerSide);
+    for (int i = 0; i < nGridPerSide; i++)
+    {
+        for (int j = 0; j < nGridPerSide; j++)
+        {
+            x.SetVal(mreal(data[i * nGridPerSide + j]), i, j);
+            //std::cout<<data[i*nGridPerSide+j]<<" ";
+        }
+        //std::cout<<std::endl;
+    }
+    mglGraph gr;
+    gr.SetSize(1600, 1600);
+    //gr.Aspect(0.75, 1.0);
+    //gr.Colorbar(">kbcyr");
+    gr.Tile(x, "bkr");
+    gr.WritePNG((file + std::string(".png")).c_str());
 }
 
 class gridModel
@@ -383,13 +383,14 @@ int main()
         std::stringstream ss;
         ss << "avalanche_" << numAvalanche;
 
-        bool avalanched = model.avalanche(ss.str());
-        numAvalanche += avalanched;
+        bool avalanched = model.avalanche("");
         if (avalanched)
         {
             std::cout << numAvalanche << "avalanches so far.\n";
-            plot(model.hasRearranged, nGridPerSide, ss.str());
+            if(numAvalanche%100==0)
+                plot(model.hasRearranged, nGridPerSide, ss.str());
         }
+        numAvalanche += avalanched;
 
         double sum=0.0;
         for(auto s : model.alle)
