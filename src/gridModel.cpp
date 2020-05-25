@@ -198,8 +198,10 @@ public:
         rearrangingStep.resize(nSite);
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i].x[0] = this->eDistribution(this->rEngine);
-            this->alle[i].x[1] = this->eDistribution(this->rEngine);
+            this->alle[i].x[0] = 0.0;
+            this->alle[i].x[1] = 0.0;
+            //this->alle[i].x[0] = this->eDistribution(this->rEngine);
+            //this->alle[i].x[1] = this->eDistribution(this->rEngine);
             this->alls[i] = this->sDistribution(this->rEngine);
             this->yieldStrainCoeff[i] = this->coeffDistribution(this->rEngine);
             this->hasRearranged[i] = 0;
@@ -369,7 +371,7 @@ public:
 
 int main()
 {
-    const int nGridPerSide = 1000;
+    const int nGridPerSide = 500;
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
