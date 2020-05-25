@@ -48,7 +48,7 @@ public:
     std::exponential_distribution<double> coeffDistribution;
     std::vector<double> yieldStrainCoeff;
 
-    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), coeffDistribution(1.0), nGridPerSide(nGrid), lGrid(lGrid)
+    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.001), sDistribution(-2.0, 2.0), coeffDistribution(1.0), nGridPerSide(nGrid), lGrid(lGrid)
     {
     }
 
@@ -198,10 +198,8 @@ public:
         rearrangingStep.resize(nSite);
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i].x[0] = 0.0;
-            this->alle[i].x[1] = 0.0;
-            //this->alle[i].x[0] = this->eDistribution(this->rEngine);
-            //this->alle[i].x[1] = this->eDistribution(this->rEngine);
+            this->alle[i].x[0] = this->eDistribution(this->rEngine);
+            this->alle[i].x[1] = this->eDistribution(this->rEngine);
             this->alls[i] = this->sDistribution(this->rEngine);
             this->yieldStrainCoeff[i] = this->coeffDistribution(this->rEngine);
             this->hasRearranged[i] = 0;
