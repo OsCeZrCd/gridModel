@@ -233,7 +233,6 @@ public:
                 for (int i = 0; i < nSite; i++)
                     if (startRearranging(alle[i], alls[i], i))
                     {
-                        hasRearranged[i] = 1;
                         rearrangingStep[i] = 1;
                     }
 
@@ -328,6 +327,7 @@ public:
                         {
                             //carry out the rearrangement
                             rearrangingStep[i]++;
+                            hasRearranged[i] = 1;
                             // if (rearrangingStep[i] > 4)
                             // {
                             //     rearrangingStep[i] = 0;
