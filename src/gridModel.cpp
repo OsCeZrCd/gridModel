@@ -379,6 +379,7 @@ int main()
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
+    std::fstream strainFile("xyStrain.txt", std::fstream::out);
     while (numAvalanche < 100000)
     {
         //std::cout << "shearing\n";
@@ -395,6 +396,11 @@ int main()
             std::cout << numAvalanche << "avalanches so far.\n";
             plot(model.hasRearranged, nGridPerSide, ss.str());
         }
+
+        double sum=0.0;
+        for(auto s : model.alle)
+            sum+=s.x[0];
+        strainFile<<sum/model.alle.size()<<std::endl;
     }
     // for (auto &s : model.alls)
     //     std::cout << s << std::endl;
