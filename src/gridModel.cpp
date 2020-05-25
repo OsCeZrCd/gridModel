@@ -61,6 +61,27 @@ void writebinary(const std::vector<T> &data, int nGridPerSide, std::string file)
 
 }
 
+template <typename T>
+void writebinary_scalar(const std::vector<T> &data, int nGridPerSide, std::string file)
+{
+  std::ofstream re_data;
+  re_data.open ("data_Softness.bin", std::ios::out | std::ios::binary | std::fstream::app);
+
+  double nsum = nGridPerSide*nGridPerSide;
+  re_data.write((char*)&nsum,sizeof(double));
+
+  for (int i = 0; i < nsum; i++)
+  {
+
+          double gindex=data[i];
+          re_data.write((char*)&gindex,sizeof(double));
+
+  }
+  std::cout<< "softness written: " << nsum <<std::endl;
+  re_data.close();
+}
+
+
 class gridModel
 {
 public:
@@ -83,9 +104,9 @@ public:
 
     bool startRearranging(GeometryVector e, double s)
     {
-        double yieldStrain = 0.003 - 0.001 * s;
-        if (yieldStrain < 0.0015)
-            yieldStrain = 0.0015;
+        double yieldStrain = 0.006 - 0.002 * s;
+        if (yieldStrain < 0.002)
+            yieldStrain = 0.002;
         return e.Modulus2() > yieldStrain * yieldStrain;
         //return e.x[0] > yieldStrain;
     }
@@ -103,10 +124,10 @@ public:
     // }
     double dsFromRearranger(double dx, double dy, double r)
     {
-        if (r < 4.0)
-             return 0.001;
+        if (r < 1.0)
+             return 0.00;
         else if (r < 30)
-            return 0.2*1.0 / r / r / r - 0.2*0.16 / r / r * (std::sin(2.0 * std::atan2(dy, dx)));
+            return 0.5*0.32 / r / r / r - 0.5*0.16 / r / r * (std::sin(2.0 * std::atan2(dy, dx)));
         else
             return 0.0;
     }
@@ -152,7 +173,7 @@ public:
             kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
             kiss_fftnd(st, inbuf, outbuf);
             //fill in dEBuffer
-            factor = 0.0005 / std::fabs(outbuf[0].r);
+            factor = 0.005 / std::fabs(outbuf[0].r);
 
             for (int i = 0; i < nGridPerSide; i++)
                 for (int j = 0; j < nGridPerSide; j++)
@@ -250,11 +271,19 @@ public:
 
     void shear()
     {
+
+        double sum = 0.0;
+        for (auto &s : this->alls)
+            sum += s;
+        double mean_s = sum / alls.size();
+
         int nSite = nGridPerSide * nGridPerSide;
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i].x[0] += 1.0e-6;
+            double E_increament = 1.0 + (this->alls[i] - mean_s) * 0.2;
+            E_increament = std::max(0.0,E_increament);
+            this->alle[i].x[0] += 1.0e-6 * E_increament;
             this->alle[i].x[1] += 0.0e-6;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
@@ -302,18 +331,18 @@ public:
                         {
                             int xInBuffer = bufferCenter - rx + x;
                             // while (xInBuffer < 0)
-                                // xInBuffer += nGridPerSide;
+                            //     xInBuffer += nGridPerSide;
                             // while (xInBuffer >= nGridPerSide)
-                                // xInBuffer -= nGridPerSide;
+                            //     xInBuffer -= nGridPerSide;
                             if (xInBuffer>=0 && xInBuffer<nGridPerSide)
                             {
                             for (int y = 0; y < nGridPerSide; y++)
                             {
                                 int yInBuffer = bufferCenter - ry + y;
                                 // while (yInBuffer < 0)
-                                    // yInBuffer += nGridPerSide;
+                                //     yInBuffer += nGridPerSide;
                                 // while (yInBuffer >= nGridPerSide)
-                                    // yInBuffer -= nGridPerSide;
+                                //     yInBuffer -= nGridPerSide;
                                 if (yInBuffer>=0 && yInBuffer<nGridPerSide)
                                 {
                                 GeometryVector &e = alle[x * nGridPerSide + y];
@@ -356,18 +385,18 @@ public:
                         {
                             int xInBuffer = bufferCenter - rx + x;
                             // while (xInBuffer < 0)
-                                // xInBuffer += nGridPerSide;
+                            //     xInBuffer += nGridPerSide;
                             // while (xInBuffer >= nGridPerSide)
-                                // xInBuffer -= nGridPerSide;
+                            //     xInBuffer -= nGridPerSide;
                             if (xInBuffer>=0 && xInBuffer<nGridPerSide)
                             {
                             for (int y = 0; y < nGridPerSide; y++)
                             {
                                 int yInBuffer = bufferCenter - ry + y;
                                 // while (yInBuffer < 0)
-                                    // yInBuffer += nGridPerSide;
+                                //     yInBuffer += nGridPerSide;
                                 // while (yInBuffer >= nGridPerSide)
-                                    // yInBuffer -= nGridPerSide;
+                                //     yInBuffer -= nGridPerSide;
                                 //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
                                 if (yInBuffer>=0 && yInBuffer<nGridPerSide)
                                 {
@@ -398,7 +427,8 @@ public:
                             double dissp_factor = 0;
                             alle[i].x[0] = alle[i].x[0] *  dissp_factor;
                             alle[i].x[1] = alle[i].x[1] *  dissp_factor;
-                            alls[i] = alls[i] + (-0.2 * alls[i] + 0.05) * (1-dissp_factor);
+                            // alls[i] = alls[i] + (-0.2 * alls[i] + 0.1) * (1-dissp_factor);
+                            alls[i] = sDistribution(rEngine) + (0.4);
                             numRearrange++;
                             //alls[i] = sDistribution(rEngine);
                             //rearrangingStep[i] = 0;
@@ -446,8 +476,9 @@ int main()
 
    // std::vector<bool> hasRearranged_collect;
    // hasRearranged_collect.assign(0, nGridPerSide*nGridPerSide);
+   double meanS = 0.0;
 
-   while (strainstep<1000000)
+   while (strainstep<1000000 && meanS<1.0)
     {
         //std::cout << "shearing\n";
         model.shear();
@@ -472,6 +503,8 @@ int main()
         for (auto &s : model.alls)
            sum += s;
 
+        meanS = sum / model.alls.size();
+
         //writebinary(model.hasRearranged, nGridPerSide, ss.str());
         writebinary<bool>(model.hasRearranged, nGridPerSide, ss.str());
         std::cout << "Currently at step: " << strainstep << ", Number of rearrangement:"<<  numRe;
@@ -479,6 +512,13 @@ int main()
         // }
 
         strainstep+=1;
+
+        if ((strainstep-1)%50==0)
+        {
+            writebinary_scalar<double>(model.alls, nGridPerSide, ss.str());
+        }
+
+
 
         // }
     }

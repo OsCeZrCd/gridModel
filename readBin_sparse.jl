@@ -6,13 +6,13 @@ gr(size=(500,500))
 filename = "data_hasRe.bin";
 stream = open(filename, "r");
 
-total_step = 5000
+total_step =2050
 Ptotal = 500*500
 Gvals = Array{Int32}(undef, Ptotal);
 println("new session")
-# Gvals = Gvals .* 0;
+Gvals = Gvals .* 0;
 
-sum_step = 1200;
+sum_step = 20;
 
 for i=1:total_step
 
@@ -26,7 +26,7 @@ for i=1:total_step
    global Gvals[Gvals_frame] = fill(1,Ntotal);
   end
 
-  if (i%sum_step==0)
+  if ((i-1)%sum_step==0)
   global Gval_mat = reshape(Gvals,(500,500));
   handle = heatmap(Gval_mat,legend = :none)
   fn = "./frame_$(i).png";
