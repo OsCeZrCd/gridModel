@@ -45,10 +45,10 @@ public:
     std::normal_distribution<double> sDistribution;
     std::normal_distribution<double> eDistribution;
 
-    std::exponential_distribution<double> coeffDistribution;
+    std::gamma_distribution<double> coeffDistribution;
     std::vector<double> yieldStrainCoeff;
 
-    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.001), sDistribution(-2.0, 2.0), coeffDistribution(1.0), nGridPerSide(nGrid), lGrid(lGrid)
+    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), coeffDistribution(1.5, 0.667), nGridPerSide(nGrid), lGrid(lGrid)
     {
     }
 
@@ -369,7 +369,7 @@ public:
 
 int main()
 {
-    const int nGridPerSide = 500;
+    const int nGridPerSide = 300;
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
     int numAvalanche = 0;
