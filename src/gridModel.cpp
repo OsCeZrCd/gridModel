@@ -10,28 +10,6 @@
 #include "mgl2/mgl.h"
 
 template <typename T>
-void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
-{
-    // mglData x(nGridPerSide , nGridPerSide);
-    //
-    // for (int i = 0; i < nGridPerSide; i++)
-    // {
-    //     for (int j = 0; j < nGridPerSide; j++)
-    //     {
-    //         x.SetVal(mreal(data[i * nGridPerSide + j]), i, j);
-    //         //std::cout<<data[i*nGridPerSide+j]<<" ";
-    //     }
-    //     //std::cout<<std::endl;
-    // }
-    // mglGraph gr;
-    // gr.SetSize(1600, 1600);
-    // //gr.Aspect(0.75, 1.0);
-    // //gr.Colorbar(">kbcyr");
-    // gr.Tile(x, "bkr");
-    // gr.WritePNG((file + std::string(".png")).c_str());
-}
-
-template <typename T>
 void writebinary(const std::vector<T> &data, int nGridPerSide, std::string file)
 {
   std::ofstream re_data;
@@ -88,6 +66,8 @@ public:
     int nGridPerSide;
     double lGrid;
     int bufferCenter;
+    double mean_softness;
+    double dmean_softness;
 
     std::vector<double> dSBuffer, alls;
     std::vector<GeometryVector> dEBuffer, alle; //e is strain
@@ -98,16 +78,26 @@ public:
     std::normal_distribution<double> sDistribution;
     std::normal_distribution<double> eDistribution;
 
-    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.000001), sDistribution(-0.2, 2.0), nGridPerSide(nGrid), lGrid(lGrid)
+    std::gamma_distribution<double> coeffDistribution;
+    std::vector<double> yieldStrainCoeff;
+
+    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.000001), sDistribution(-0.2, 2.0), coeffDistribution(1.5, 0.667), nGridPerSide(nGrid), lGrid(lGrid)
     {
     }
 
-    bool startRearranging(GeometryVector e, double s)
+    bool startRearranging(GeometryVector e, double s, int i)
     {
-        double yieldStrain = 0.006 - 0.002 * s;
-        if (yieldStrain < 0.002)
-            yieldStrain = 0.002;
+        // double yieldStrain = 0.006 - 0.002 * s;
+        // if (yieldStrain < 0.002)
+        //     yieldStrain = 0.002;
+        // return e.Modulus2() > yieldStrain * yieldStrain;
+
+        double yieldStrain = 0.009 - 0.003 * s;
+        if (yieldStrain < 0.003)
+            yieldStrain = 0.003;
+        yieldStrain*=yieldStrainCoeff[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
+
         //return e.x[0] > yieldStrain;
     }
     // GeometryVector eFromRearranger(double dx, double dy, double r)
@@ -127,7 +117,7 @@ public:
         if (r < 1.0)
              return 0.00;
         else if (r < 30)
-            return 0.5*0.32 / r / r / r - 0.5*0.16 / r / r * (std::sin(2.0 * std::atan2(dy, dx)));
+            return 0.75*0.32 / r / r / r - 0.75*0.16 / r / r * (std::sin(2.0 * std::atan2(dy, dx)));
         else
             return 0.0;
     }
@@ -257,11 +247,17 @@ public:
         alls.resize(nSite);
         hasRearranged.resize(nSite);
         rearrangingStep.resize(nSite);
+        yieldStrainCoeff.resize(nSite);
+
+        mean_softness = 0;
+        dmean_softness = 2E-5;
+
         for (int i = 0; i < nSite; i++)
         {
             this->alle[i].x[0] = this->eDistribution(this->rEngine); //initialize strain with a distrbution e with a random number generator
             this->alle[i].x[1] = this->eDistribution(this->rEngine);
             this->alls[i] = this->sDistribution(this->rEngine); //initialize softness with a distrbution s
+            this->yieldStrainCoeff[i] = this->coeffDistribution(this->rEngine);
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
@@ -281,16 +277,18 @@ public:
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
-            double E_increament = 1.0 + (this->alls[i] - mean_s) * 0.2;
+            double E_increament = 1.0 + (this->alls[i] - mean_s) * 0.15;
             E_increament = std::max(0.0,E_increament);
             this->alle[i].x[0] += 1.0e-6 * E_increament;
             this->alle[i].x[1] += 0.0e-6;
+            this->alls[i] += dmean_softness;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
+
+        mean_softness = mean_softness + dmean_softness;
+
     }
-
-
 
 
     int avalanche(std::string outputPrefix = "")
@@ -299,19 +297,16 @@ public:
         int nSite = nGridPerSide * nGridPerSide;
         int nStep = 0;
         double deltaEnergy;
-        // int loopnum = 0;
-        int numRearrange = 0;
 #pragma omp parallel
         {
-            // int loopnum = 0;
-            //
-            // while (loopnum == 0)
-            // {
+            int numRearrange = 1;
+            while (numRearrange > 0)
+            {
 #pragma omp for schedule(static)
                 for (int i = 0; i < nSite; i++)
-                    if (startRearranging(alle[i], alls[i]))   // if yield strain cross rearrangement barrier
+                    if (startRearranging(alle[i], alls[i],i))
                     {
-                        hasRearranged[i] = 1;
+                        // hasRearranged[i] = 1;
                         rearrangingStep[i] = 1;
                     }
 
@@ -327,35 +322,35 @@ public:
 #pragma omp barrier
 #pragma omp for schedule(static) reduction(+ \
                                            : deltaEnergy)
-                        for (int x = 0; x < nGridPerSide; x++)
-                        {
-                            int xInBuffer = bufferCenter - rx + x;
-                            // while (xInBuffer < 0)
-                            //     xInBuffer += nGridPerSide;
-                            // while (xInBuffer >= nGridPerSide)
-                            //     xInBuffer -= nGridPerSide;
-                            if (xInBuffer>=0 && xInBuffer<nGridPerSide)
-                            {
-                            for (int y = 0; y < nGridPerSide; y++)
-                            {
-                                int yInBuffer = bufferCenter - ry + y;
-                                // while (yInBuffer < 0)
-                                //     yInBuffer += nGridPerSide;
-                                // while (yInBuffer >= nGridPerSide)
-                                //     yInBuffer -= nGridPerSide;
-                                if (yInBuffer>=0 && yInBuffer<nGridPerSide)
-                                {
-                                GeometryVector &e = alle[x * nGridPerSide + y];
-                                GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+                   for (int x = 0; x < nGridPerSide; x++)
+                   {
+                       int xInBuffer = bufferCenter - rx + x;
+                       // while (xInBuffer < 0)
+                       //     xInBuffer += nGridPerSide;
+                       // while (xInBuffer >= nGridPerSide)
+                       //     xInBuffer -= nGridPerSide;
+                       if (xInBuffer>=0 && xInBuffer<nGridPerSide)
+                       {
+                       for (int y = 0; y < nGridPerSide; y++)
+                       {
+                           int yInBuffer = bufferCenter - ry + y;
+                           // while (yInBuffer < 0)
+                           //     yInBuffer += nGridPerSide;
+                           // while (yInBuffer >= nGridPerSide)
+                           //     yInBuffer -= nGridPerSide;
+                           if (yInBuffer>=0 && yInBuffer<nGridPerSide)
+                           {
+                           GeometryVector &e = alle[x * nGridPerSide + y];
+                           GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
 
-                                if (ry != y || rx != x)
-                                    deltaEnergy += (e + de).Modulus2() - e.Modulus2();
-                                else
-                                    deltaEnergy -= e.Modulus2();
-                                }
-                            }
-                            }
-                        }
+                           if (ry != y || rx != x)
+                               deltaEnergy += (e + de).Modulus2() - e.Modulus2();
+                           else
+                               deltaEnergy -= e.Modulus2();
+                           }
+                       }
+                       }
+                   }
 #pragma omp single
                         {
                             //stop if energy increases
@@ -364,7 +359,6 @@ public:
                             {
                                 //std::cout << "rearrangement at stage " << int(rearrangingStep[i]) << " refuted due to energy criteria\n";
                                 rearrangingStep[i] = 0;
-                                hasRearranged[i] = 0;
                             }
                         }
                     }
@@ -381,34 +375,33 @@ public:
                         int rx = i / nGridPerSide;
                         int ry = i % nGridPerSide;
 #pragma omp for schedule(static)
-                        for (int x = 0; x < nGridPerSide; x++)
+                    for (int x = 0; x < nGridPerSide; x++)
+                    {
+                        int xInBuffer = bufferCenter - rx + x;
+                        // while (xInBuffer < 0)
+                        //     xInBuffer += nGridPerSide;
+                        // while (xInBuffer >= nGridPerSide)
+                        //     xInBuffer -= nGridPerSide;
+                        if (xInBuffer>=0 && xInBuffer<nGridPerSide)
                         {
-                            int xInBuffer = bufferCenter - rx + x;
-                            // while (xInBuffer < 0)
-                            //     xInBuffer += nGridPerSide;
-                            // while (xInBuffer >= nGridPerSide)
-                            //     xInBuffer -= nGridPerSide;
-                            if (xInBuffer>=0 && xInBuffer<nGridPerSide)
+                        for (int y = 0; y < nGridPerSide; y++)
+                        {
+                            int yInBuffer = bufferCenter - ry + y;
+                            // while (yInBuffer < 0)
+                            //     yInBuffer += nGridPerSide;
+                            // while (yInBuffer >= nGridPerSide)
+                            //     yInBuffer -= nGridPerSide;
+                            //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+                            if (yInBuffer>=0 && yInBuffer<nGridPerSide)
                             {
-                            for (int y = 0; y < nGridPerSide; y++)
-                            {
-                                int yInBuffer = bufferCenter - ry + y;
-                                // while (yInBuffer < 0)
-                                //     yInBuffer += nGridPerSide;
-                                // while (yInBuffer >= nGridPerSide)
-                                //     yInBuffer -= nGridPerSide;
-                                //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
-                                if (yInBuffer>=0 && yInBuffer<nGridPerSide)
-                                {
-                                GeometryVector &e = alle[x * nGridPerSide + y];
-                                GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
-                                e.AddFrom(de);
-                                alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
-                                }
-                            }
+                            GeometryVector &e = alle[x * nGridPerSide + y];
+                            GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+                            e.AddFrom(de);
+                            alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
                             }
                         }
-
+                        }
+                    }   numRearrange++;
                     }
                 }
 #pragma omp single
@@ -418,56 +411,218 @@ public:
                         if (rearrangingStep[i] > 0)
                         {
                             //carry out the rearrangement
-                            // rearrangingStep[i]++;
+                            rearrangingStep[i]++;
+
+                            hasRearranged[i] = 1;
                             // if (rearrangingStep[i] > 4)
                             // {
                             //     rearrangingStep[i] = 0;
                             // }
-                            // finite lifetime
-                            double dissp_factor = 0;
-                            alle[i].x[0] = alle[i].x[0] *  dissp_factor;
-                            alle[i].x[1] = alle[i].x[1] *  dissp_factor;
-                            // alls[i] = alls[i] + (-0.2 * alls[i] + 0.1) * (1-dissp_factor);
-                            alls[i] = sDistribution(rEngine) + (0.4);
-                            numRearrange++;
-                            //alls[i] = sDistribution(rEngine);
-                            //rearrangingStep[i] = 0;
+                            alle[i] = 0.0;
+                            alls[i] = sDistribution(rEngine) + mean_softness + 0.2;
+                            yieldStrainCoeff[i] = coeffDistribution(rEngine);
                         }
                     }
 
-                    // if (numRearrange > 0)
-                    // {
-                        // avalancheHappened = true;
-                        // std::cout << "num rearranger in this frame=" << numRearrange;
-                        // double sum = 0.0;
-                        // for (auto &e : this->alle)
-                        //     sum += e.Modulus2();
-                        // std::cout << ", mean energy=" << sum / alle.size();
+                    std::cout << "Internal loop, number of rearrangement = " << numRearrange << std::endl;
 
-                        // double sum = 0.0;
-                        // for (auto &s : this->alls)
-                        //     sum += s;
-                        // std::cout << ", mean s=" << sum / alls.size();
-                        // std::cout << std::endl;
-
-                        // if (outputPrefix != std::string(""))
-                        // {
-                        //     std::stringstream ss;
-                        //     ss << outputPrefix << "_step_" << (nStep++);
-                        //     plot(this->rearrangingStep, nGridPerSide, ss.str());
-                        // }
-                    // }
                 }
-                // loopnum+=1;
-            // }
+            }
         }
-        return numRearrange;
+
+        int numRe_frame = 0;
+        for (int i = 0; i < nSite; i++)
+        {
+            if (hasRearranged[i] == 1)
+            {
+                numRe_frame+=1;
+            }
+
+        }
+
+        return numRe_frame;
     }
+
+
+
+
+//
+//
+//     int avalanche(std::string outputPrefix = "")
+//     {
+//         bool avalancheHappened = false;
+//         int nSite = nGridPerSide * nGridPerSide;
+//         int nStep = 0;
+//         double deltaEnergy;
+//         // int loopnum = 0;
+//         int numRearrange = 0;
+// #pragma omp parallel
+//         {
+//             // int loopnum = 0;
+//             //
+//             // while (loopnum == 0)
+//             // {
+// #pragma omp for schedule(static)
+//                 for (int i = 0; i < nSite; i++)
+//                     if (startRearranging(alle[i], alls[i]))   // if yield strain cross rearrangement barrier
+//                     {
+//                         hasRearranged[i] = 1;
+//                         rearrangingStep[i] = 1;
+//                     }
+//
+//                 //stop rearrangements that increases energy
+//                 for (int i = 0; i < nSite; i++)
+//                 {
+//                     if (rearrangingStep[i] > 0)
+//                     {
+//                         //calculate energy difference
+//                         deltaEnergy = 0;
+//                         int rx = i / nGridPerSide;
+//                         int ry = i % nGridPerSide;
+// #pragma omp barrier
+// #pragma omp for schedule(static) reduction(+ \
+//                                            : deltaEnergy)
+//                         for (int x = 0; x < nGridPerSide; x++)
+//                         {
+//                             int xInBuffer = bufferCenter - rx + x;
+//                             // while (xInBuffer < 0)
+//                             //     xInBuffer += nGridPerSide;
+//                             // while (xInBuffer >= nGridPerSide)
+//                             //     xInBuffer -= nGridPerSide;
+//                             if (xInBuffer>=0 && xInBuffer<nGridPerSide)
+//                             {
+//                             for (int y = 0; y < nGridPerSide; y++)
+//                             {
+//                                 int yInBuffer = bufferCenter - ry + y;
+//                                 // while (yInBuffer < 0)
+//                                 //     yInBuffer += nGridPerSide;
+//                                 // while (yInBuffer >= nGridPerSide)
+//                                 //     yInBuffer -= nGridPerSide;
+//                                 if (yInBuffer>=0 && yInBuffer<nGridPerSide)
+//                                 {
+//                                 GeometryVector &e = alle[x * nGridPerSide + y];
+//                                 GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+//
+//                                 if (ry != y || rx != x)
+//                                     deltaEnergy += (e + de).Modulus2() - e.Modulus2();
+//                                 else
+//                                     deltaEnergy -= e.Modulus2();
+//                                 }
+//                             }
+//                             }
+//                         }
+// #pragma omp single
+//                         {
+//                             //stop if energy increases
+//                             // std::cout<<"de= "<<deltaEnergy<<' ';
+//                             if (deltaEnergy > 0)
+//                             {
+//                                 //std::cout << "rearrangement at stage " << int(rearrangingStep[i]) << " refuted due to energy criteria\n";
+//                                 rearrangingStep[i] = 0;
+//                                 hasRearranged[i] = 0;
+//                             }
+//                         }
+//                     }
+//                 }
+//
+// #pragma omp barrier
+//                 //rearrangement affect other sites parameters
+//                 numRearrange = 0;
+//                 for (int i = 0; i < nSite; i++)
+//                 {
+//                     if (rearrangingStep[i] > 0)
+//                     {
+//                         //update softness and strain
+//                         int rx = i / nGridPerSide;
+//                         int ry = i % nGridPerSide;
+// #pragma omp for schedule(static)
+//                         for (int x = 0; x < nGridPerSide; x++)
+//                         {
+//                             int xInBuffer = bufferCenter - rx + x;
+//                             // while (xInBuffer < 0)
+//                             //     xInBuffer += nGridPerSide;
+//                             // while (xInBuffer >= nGridPerSide)
+//                             //     xInBuffer -= nGridPerSide;
+//                             if (xInBuffer>=0 && xInBuffer<nGridPerSide)
+//                             {
+//                             for (int y = 0; y < nGridPerSide; y++)
+//                             {
+//                                 int yInBuffer = bufferCenter - ry + y;
+//                                 // while (yInBuffer < 0)
+//                                 //     yInBuffer += nGridPerSide;
+//                                 // while (yInBuffer >= nGridPerSide)
+//                                 //     yInBuffer -= nGridPerSide;
+//                                 //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+//                                 if (yInBuffer>=0 && yInBuffer<nGridPerSide)
+//                                 {
+//                                 GeometryVector &e = alle[x * nGridPerSide + y];
+//                                 GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+//                                 e.AddFrom(de);
+//                                 alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
+//                                 }
+//                             }
+//                             }
+//                         }
+//
+//                     }
+//                 }
+// #pragma omp single
+//                 {
+//                     for (int i = 0; i < nSite; i++)
+//                     {
+//                         if (rearrangingStep[i] > 0)
+//                         {
+//                             //carry out the rearrangement
+//                             // rearrangingStep[i]++;
+//                             // if (rearrangingStep[i] > 4)
+//                             // {
+//                             //     rearrangingStep[i] = 0;
+//                             // }
+//                             // finite lifetime
+//                             double dissp_factor = 0;
+//                             alle[i].x[0] = alle[i].x[0] *  dissp_factor;
+//                             alle[i].x[1] = alle[i].x[1] *  dissp_factor;
+//                             // alls[i] = alls[i] + (-0.2 * alls[i] + 0.1) * (1-dissp_factor);
+//                             alls[i] = sDistribution(rEngine) + (0.4);
+//                             numRearrange++;
+//                             //alls[i] = sDistribution(rEngine);
+//                             //rearrangingStep[i] = 0;
+//                         }
+//                     }
+//
+//                     // if (numRearrange > 0)
+//                     // {
+//                         // avalancheHappened = true;
+//                         // std::cout << "num rearranger in this frame=" << numRearrange;
+//                         // double sum = 0.0;
+//                         // for (auto &e : this->alle)
+//                         //     sum += e.Modulus2();
+//                         // std::cout << ", mean energy=" << sum / alle.size();
+//
+//                         // double sum = 0.0;
+//                         // for (auto &s : this->alls)
+//                         //     sum += s;
+//                         // std::cout << ", mean s=" << sum / alls.size();
+//                         // std::cout << std::endl;
+//
+//                         // if (outputPrefix != std::string(""))
+//                         // {
+//                         //     std::stringstream ss;
+//                         //     ss << outputPrefix << "_step_" << (nStep++);
+//                         //     plot(this->rearrangingStep, nGridPerSide, ss.str());
+//                         // }
+//                     // }
+//                 }
+//                 // loopnum+=1;
+//             // }
+//         }
+//         return numRearrange;
+//     }
 };
 
 int main()
 {
-    const int nGridPerSide = 500;
+    const int nGridPerSide = 400;
     gridModel model(nGridPerSide, 1.0);
     model.initialize();
    int numAvalanche = 0;
@@ -478,7 +633,7 @@ int main()
    // hasRearranged_collect.assign(0, nGridPerSide*nGridPerSide);
    double meanS = 0.0;
 
-   while (strainstep<1000000 && meanS<1.0)
+   while (strainstep<8000 && meanS<1.0)
     {
         //std::cout << "shearing\n";
         model.shear();
@@ -519,6 +674,19 @@ int main()
         }
 
 
+        std::ofstream re_mean_data;
+        re_mean_data.open ("data_mean.bin", std::ios::out | std::ios::binary | std::fstream::app);
+        double nstep = strainstep;
+        re_mean_data.write((char*)&nstep,sizeof(double));
+        re_mean_data.write((char*)&meanS,sizeof(double));
+
+        double etotal=0;
+        for (auto &e : model.alle)
+           etotal += e.Modulus2();
+
+        re_mean_data.write((char*)&etotal,sizeof(double));
+
+        re_mean_data.close();
 
         // }
     }
