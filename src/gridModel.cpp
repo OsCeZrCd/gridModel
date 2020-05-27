@@ -7,6 +7,7 @@
 #include "kiss_fft.h"
 #include "kiss_fftnd.h"
 #include "mgl2/mgl.h"
+#include <netcdf>
 
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
@@ -38,8 +39,8 @@ public:
 
     std::vector<double> dSBuffer, alls;
     std::vector<GeometryVector> dEBuffer, alle; //e is strain
-    std::vector<char> rearrangingStep;
-    std::vector<bool> hasRearranged;
+    std::vector<int> rearrangingStep;
+    std::vector<char> hasRearranged;
 
     std::mt19937 rEngine;
     std::normal_distribution<double> sDistribution;
@@ -48,8 +49,82 @@ public:
     std::gamma_distribution<double> coeffDistribution;
     std::vector<double> yieldStrainCoeff;
 
+    netCDF::NcFile dumpFile;
+    netCDF::NcVar eVar, sVar, hasRearrangedVar;
+
     gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), coeffDistribution(1.5, 0.667), nGridPerSide(nGrid), lGrid(lGrid)
     {
+    }
+
+    void openDumpFile(const std::string & filename)
+    {
+        dumpFile.open(filename, netCDF::NcFile::replace);
+        int dim=2;
+        std::vector<netCDF::NcDim> dims, strainDims;
+
+        netCDF::NcDim framedim=dumpFile.addDim("frames");
+        dims.push_back(framedim);
+        strainDims.push_back(framedim);
+        strainDims.push_back(dumpFile.addDim("strainComponents", ::MaxDimension));
+        for(int i=0; i<dim; i++)
+        {
+            std::stringstream ss;
+            ss<<"dim_"<<i;
+            netCDF::NcDim temp=dumpFile.addDim(ss.str(), nGridPerSide);
+            dims.push_back(temp);
+            strainDims.push_back(temp);
+        }
+
+        eVar=dumpFile.addVar("strain", netCDF::ncDouble, strainDims);
+        sVar=dumpFile.addVar("softness", netCDF::ncDouble, dims);
+        hasRearrangedVar=dumpFile.addVar("hasRearranged", netCDF::ncByte, dims);
+        eVar.setCompression(true, true, 9);
+        sVar.setCompression(true, true, 9);
+        hasRearrangedVar.setCompression(true, true, 9);
+    }
+    void dump(bool writeStrain=false, bool writeSoftness=false, bool writeHasRearranged=true)
+    {
+        int dim=2;
+
+        int framesAlreadyWritten=eVar.getDim(0).getSize();
+        //write strain
+        if(writeStrain)
+        {
+            std::vector<size_t> startp, countp;
+            startp.push_back(framesAlreadyWritten);//start from the end of the previous frame
+            startp.push_back(0);
+            for(int i=0; i<dim; i++)
+                startp.push_back(0);
+            countp.push_back(1);//write one frame
+            countp.push_back(::MaxDimension);
+            for(int i=0; i<dim; i++)
+                countp.push_back(nGridPerSide);
+            eVar.putVar(startp, countp, alle.data());
+        }
+        //write softness
+        if(writeSoftness)
+        {
+            std::vector<size_t> startp, countp;
+            startp.push_back(framesAlreadyWritten);
+            for(int i=0; i<dim; i++)
+                startp.push_back(0);
+            countp.push_back(1);
+            for(int i=0; i<dim; i++)
+                countp.push_back(nGridPerSide);
+            sVar.putVar(startp, countp, alls.data());
+        }
+        //write hasRearranged
+        if(writeHasRearranged)
+        {
+            std::vector<size_t> startp, countp;
+            startp.push_back(framesAlreadyWritten);
+            for(int i=0; i<dim; i++)
+                startp.push_back(0);
+            countp.push_back(1);
+            for(int i=0; i<dim; i++)
+                countp.push_back(nGridPerSide);
+            hasRearrangedVar.putVar(startp, countp, (void *)(hasRearranged.data()) );
+        }
     }
 
     bool startRearranging(GeometryVector e, double s, int i)
@@ -369,8 +444,14 @@ public:
 
 int main()
 {
+    //make sure that the compiler does not add blank space in class GeometryVector
+    //if the compiler does that, dumping may not work.
+    assert(sizeof(GeometryVector)==MaxDimension*sizeof(double));
+
+
     const int nGridPerSide = 300;
     gridModel model(nGridPerSide, 1.0);
+    model.openDumpFile("temp.nc");
     model.initialize();
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
@@ -388,7 +469,12 @@ int main()
         {
             std::cout << numAvalanche << "avalanches so far.\n";
             if(numAvalanche%100==0)
+            {
                 plot(model.hasRearranged, nGridPerSide, ss.str());
+                model.dump(true, true, true);
+            }
+            else
+                model.dump(false, false, true);
         }
         numAvalanche += avalanched;
 
