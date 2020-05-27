@@ -2,6 +2,10 @@
 #define GEOMETRYVECTOR_INCLUDED
 
 typedef int DimensionType;
+
+
+//since we are using GeometryVector to represent different components of the deviatoric strain
+//this should be set to the number of degrees of freedom in the deviatoric strain.
 const DimensionType MaxDimension=2;
 
 #include <cstring>
