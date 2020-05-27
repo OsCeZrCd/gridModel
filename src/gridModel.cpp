@@ -331,7 +331,7 @@ public:
             double &fillSValue = alls[0];
             for (int i = 1; i < nGridPerSide * nGridPerSide; i++)
             {
-                if (alle[i].x[0] != fillEValue || alle[i].x[1] != fillEValue || alls[i] != fillSValue)
+                if (alle[i].x[0] != fillEValue && alle[i].x[1] != fillEValue && alls[i] != fillSValue)
                 {
                     std::cout << "initialized from dump file: " << filename << ", at frame " << framesToRead << std::endl;
                     return;
