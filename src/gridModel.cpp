@@ -61,7 +61,6 @@ public:
         netCDF::NcDim framedim=dumpFile.addDim("frames");
         dims.push_back(framedim);
         strainDims.push_back(framedim);
-        strainDims.push_back(dumpFile.addDim("strainComponents", ::MaxDimension));
         for(int i=0; i<dim; i++)
         {
             std::stringstream ss;
@@ -70,6 +69,7 @@ public:
             dims.push_back(temp);
             strainDims.push_back(temp);
         }
+        strainDims.push_back(dumpFile.addDim("strainComponents", ::MaxDimension));
 
         eVar=dumpFile.addVar("strain", netCDF::ncDouble, strainDims);
         sVar=dumpFile.addVar("softness", netCDF::ncDouble, dims);
@@ -88,14 +88,17 @@ public:
         {
             std::vector<size_t> startp, countp;
             startp.push_back(framesAlreadyWritten);//start from the end of the previous frame
-            startp.push_back(0);
             for(int i=0; i<dim; i++)
                 startp.push_back(0);
+            startp.push_back(0);
             countp.push_back(1);//write one frame
-            countp.push_back(::MaxDimension);
             for(int i=0; i<dim; i++)
                 countp.push_back(nGridPerSide);
+            countp.push_back(::MaxDimension);
             eVar.putVar(startp, countp, alle.data());
+
+            //debug temp
+            std::cout<<"dumping strain. first block strain="<<alle[0];
         }
         //write softness
         if(writeSoftness)
@@ -454,13 +457,13 @@ int main()
     assert(sizeof(GeometryVector)==MaxDimension*sizeof(double));
 
 
-    const int nGridPerSide = 500;
+    const int nGridPerSide = 10;
     gridModel model(nGridPerSide, 1.0);
     model.openDumpFile("temp.nc");
     model.initialize();
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
-    while (numAvalanche < 1000)
+    while (numAvalanche < 2)
     {
         //std::cout << "shearing\n";
         model.shear();
