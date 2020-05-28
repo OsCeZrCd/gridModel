@@ -1,0 +1,39 @@
+using Plots;
+
+#plotly(size=(500,500))
+gr(size=(600,600))
+
+filename = "data_hasRe.bin";
+stream = open(filename, "r");
+
+total_step =4770
+Ptotal = 400*400
+Gvals = Array{Int32}(undef, Ptotal);
+println("new session")
+Gvals = Gvals .* 0;
+
+sum_step = 10;
+
+for i=1:total_step
+
+ Ntotal=read(stream,Int32);
+ println("Frame: ", i,". Number of rearrangers: ", Ntotal)
+
+  if Ntotal>0
+   Gvals_frame = Array{Int32}(undef, Ntotal);
+   read!(stream, Gvals_frame);
+   Gvals_frame = Gvals_frame .+ 1;
+   global Gvals[Gvals_frame] = fill(1,Ntotal);
+  end
+
+  if ((i-1)%sum_step==0)
+  global Gval_mat = reshape(Gvals,(400,400));
+  handle = heatmap(Gval_mat,legend = :none)
+  fn = "./frame_$(i).png";
+  png(handle,fn)
+  global Gvals = Gvals .* 0;
+  end
+
+end
+
+close(stream)
