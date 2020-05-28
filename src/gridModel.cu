@@ -458,6 +458,8 @@ public:
 
               energy_kernal <<< numBlocks, numThreads >>> (nGridPerSide, dE_xy, dE_xx, dEbuffer_xy, dEbuffer_xx, d_pindex_pt, d_energy_pt, site_2_check);
 
+              cudaDeviceSynchronize();
+
               for (int i = 0; i < site_2_check; i++)
               {
 //            	  std::cout << "energy change: " << d_energy[i] << std::endl;
