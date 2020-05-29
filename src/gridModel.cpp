@@ -36,6 +36,7 @@ public:
   int nGridPerSide;
   double lGrid;
   int d;
+  int nSite;
   int bufferCenter;
 
   std::vector<double> dSBuffer, alls;
@@ -72,6 +73,11 @@ public:
         nGridPerSide(nGrid), lGrid(lGrid), d(d), eDistribution(eDist),
         sDistribution(sDist)
   {
+    nSite = 1;
+    for(int dd=0; dd<d; dd++)
+    {
+      nSite *= nGrid;
+    }
   }
 
   /********************************************************************
@@ -83,7 +89,6 @@ public:
    *******************************************************************/
   void initialize()
   {   
-    int nSite = nGridPerSide * nGridPerSide;
     alle.resize(nSite);
     alls.resize(nSite);
     hasRearranged.resize(nSite);
@@ -100,8 +105,156 @@ public:
   } 
 
 
+  /********************************************************************
+  * unstack
+  *
+  * Takes a site index (site) and converts it into a site coordinate
+  * site_coor in i, j(, k) space.
+  *
+  * Parameters
+  * ----------
+  *  site : int
+  *    site index which runs from [0, nSite]
+  *  site_coor: std::vector<int>
+  *    d dimensional vector that is the location of the site in i, j(, 
+  *    k) space.
+  *
+  ********************************************************************/
+  void unstack(int site, std::vector<int>& site_coor)
+  {
+    if(d==2)
+    {
+      int x, y;
+      y = site/nGridPerSide;
+      x = site - y*nGridPerSide;
+      site_coor[0] = x, site_coor[1] = y;
+    }
+    else
+    {
+      int x, y, z;
+      z = site / (nGridPerSide*nGridPerSide);
+      y = (site - z*nGridPerSide*nGridPerSide) / nGridPerSide;
+      x = site - z*nGridPerSide*nGridPerSide - y*nGridPerSide;
+    }
+  }
+
+  /********************************************************************
+  * stack
+  *
+  * Takes a site coordinate (site_coor) in i, j(, k) space and converts
+  * it to a site index (site).
+  *
+  * Parameters
+  * ----------
+  *  site_coor: std::vector<int>
+  *    d dimensional vector that is the location of the site in i, j(, 
+  *    k) space.
+  *  site : int
+  *    site index which runs from [0, nSite]
+  ********************************************************************/
+  void stack(std::vector<int>& site_coor, int& site)
+  {
+    if(d==2)
+    {
+      site = site_coor[0]+site_coor[1]*nGridPerSide;
+    }
+    else
+    {
+      site = site_coor[0]+site_coor[1]*nGridPerSide;
+      site += site_coor[2]*nGridPerSide*nGridPerSide;
+    }
+  }
 
 
+  void getBuffer()
+  {
+    // Initializes change of strain (dE) and change of softness (dS)
+    // buffers as well as bufferCenter
+    bufferCenter = nGridPerSide / 2;
+    dEBuffer.resize(nSite);
+    dSBuffer.resize(nSite);
+
+    // Calculates dSBuffer assuming rearranging grid point is at center
+    //   - site_coor : i, j(, k) coordinate of site
+    //   - site_dx : dx, dy(, dz) position difference from the grid 
+    //         center
+    std::vector<int> site_coor(d);
+    std::vector<double> site_dx(d);
+    for(int site = 0; site<nSite; site++)
+    {
+      unstack(site, site_coor);
+      for(int dd=0; dd<d; dd++)
+      {
+        site_dx[dd] = (site_coor[dd]-bufferCenter) * lGrid;
+      }
+      dsFromRearranger(site_dx);
+    }   
+
+    //strain buffer calculated by Fourier transform
+    kiss_fft_cpx *inbuf = new kiss_fft_cpx[nSite];
+    kiss_fft_cpx *outbuf = new kiss_fft_cpx[nSite];
+
+    //fill in inbuf
+    for(int site=0; site<nSite; site++)
+    {
+      double fillBuff = -4.0;
+      double q2 = 0.0;
+      unstack(site, site_coor);
+      for(int dd=0; dd<d; dd++)
+      {
+        int i = site_coor[dd];
+        int ii = (i > bufferCenter) ? i - nGridPerSide : i;
+        double L = nGridPerSide * lGrid;
+        double q = 2.0 * M_PI * ii / L;
+        q2 += q*q;
+        fillBuff *= q*q;
+      }
+      for(int dd=0; dd<d; dd++)
+      {
+        fillBuff /= q2;
+      }
+      inbuf[site].r = fillBuff;
+      inbuf[site].i = 0.0;
+    }
+    inbuf[0].r = 0;
+
+    // Performs FFT in either 2D or 3D
+    if(d==2)
+    {
+      int temp[2] = {nGridPerSide, nGridPerSide};
+      kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, d, true, nullptr, nullptr);
+      kiss_fftnd(st, inbuf, outbuf);
+      free(st);
+    }
+    else
+    {
+      int temp[3] = {nGridPerSide, nGridPerSide, nGridPerSide};
+      kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, d, true, nullptr, nullptr);
+      kiss_fftnd(st, inbuf, outbuf);
+      free(st);
+    }
+
+    // Fills in dEBuffer
+    double factor = 0.02 / std::fabs(outbuf[0].r);
+    int site_periodic;
+    for(int site=0; site<nSite; site++)
+    {
+      unstack(site, site_coor);
+      for(int dd=0; dd<d; dd++)
+      {
+        int i = site_coor[dd] - bufferCenter;
+        int ii = (i < 0) ? i + nGridPerSide : i;
+        site_coor[dd] = ii;
+      }
+      stack(site_coor, site_periodic);
+      dEBuffer[site_periodic] = GeometryVector(outbuf[site].r*factor, 0.0);
+    }
+    
+    // Deletes outbuf and inbuf to save space.
+    delete[] outbuf;
+    delete[] inbuf;
+
+  }
 
 
     bool startRearranging(GeometryVector e, double s)
@@ -110,322 +263,273 @@ public:
         if (yieldStrain < 0.05)
             yieldStrain = 0.05;
         return e.Modulus2() > yieldStrain * yieldStrain;
-        //return e.x[0] > yieldStrain;
     }
-    // GeometryVector eFromRearranger(double dx, double dy, double r)
-    // {
-    //     double magnitude;
-    //     if (r < 1.0)
-    //         magnitude = 3e-2;
-    //     else
-    //         magnitude = 3e-2 / r / r;
 
-    //     double theta = std::atan2(dy, dx);
-    //     return magnitude * GeometryVector(std::cos(4 * theta), std::sin(4 * theta));
-    //     //return magnitude * GeometryVector(std::cos(4 * theta), 0.0);
-    // }
-    double dsFromRearranger(double dx, double dy, double r)
+  /********************************************************************
+   * dsFromRearranger
+   *
+   * Function that determines how softness changes when a rearranger
+   * is a vector distance site_dx away
+   *
+   * Parameters
+   * ----------
+   *  site_dx : std::vector<double>
+   *    vector with the displacement between the current grid point and
+   *    the rearranger in real units (can be 2D or 3D)
+   *
+   *******************************************************************/ 
+  double dsFromRearranger(std::vector<double> site_dx)
+  {
+    double dxy, dz, r, dS;
+
+    // Computes:
+    //   (1) Distance in xy (or x) plane (dxy)
+    //   (2) Distance in z (or y) plane (dz)
+    //   (3) Euclidean distance (r)
+    for(int dd=0; dd<d-1; dd++)
     {
-        if (r < 4.0)
-            return -0.03;
-        else if (r < 30)
-            return 1.0 / r / r / r - 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
-        else
-            return 0.0;
+      dxy += site_dx[dd]*site_dx[dd];
     }
-    void getBuffer()
+    dxy = std::sqrt(dxy);
+    dz = site_dx[d-1];
+    r = std::sqrt(dxy*dxy+dz*dz);
+    
+    // Computes change in softness
+    if(r < 4.0)
     {
-        bufferCenter = nGridPerSide / 2;
-        dEBuffer.resize(nGridPerSide * nGridPerSide);
-        dSBuffer.resize(nGridPerSide * nGridPerSide);
-        for (int i = 0; i < nGridPerSide; i++)
-            for (int j = 0; j < nGridPerSide; j++)
-            {
-                double dx = (i - bufferCenter) * lGrid;
-                double dy = (j - bufferCenter) * lGrid;
-                double r = std::sqrt(dx * dx + dy * dy);
-                int index = i * nGridPerSide + j;
-                // dEBuffer[index] = eFromRearranger(dx, dy, r);
-                dSBuffer[index] = dsFromRearranger(dx, dy, r);
-            }
-
-        double factor;
-        {
-            //strain buffer calculated by Fourier transform
-            int numPixels = nGridPerSide * nGridPerSide;
-            kiss_fft_cpx *inbuf = new kiss_fft_cpx[numPixels];
-            kiss_fft_cpx *outbuf = new kiss_fft_cpx[numPixels];
-            //fill in inbuf
-            for (int i = 0; i < nGridPerSide; i++)
-                for (int j = 0; j < nGridPerSide; j++)
-                {
-                    int ii = (i > bufferCenter) ? i - nGridPerSide : i;
-                    int jj = (j > bufferCenter) ? j - nGridPerSide : j;
-                    double L = nGridPerSide * lGrid;
-                    double pm = 2 * M_PI * ii / L;
-                    double qn = 2 * M_PI * jj / L;
-                    double q2 = pm * pm + qn * qn;
-
-                    inbuf[i * nGridPerSide + j].r = -4 * pm * pm * qn * qn / q2 / q2;
-                    inbuf[i * nGridPerSide + j].i = 0;
-                }
-            inbuf[0].r = 0;
-
-            int temp[2] = {nGridPerSide, nGridPerSide};
-            kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
-            kiss_fftnd(st, inbuf, outbuf);
-            //fill in dEBuffer
-            factor = 0.02 / std::fabs(outbuf[0].r);
-
-            for (int i = 0; i < nGridPerSide; i++)
-                for (int j = 0; j < nGridPerSide; j++)
-                {
-                    int index = i * nGridPerSide + j;
-                    int ii = i - bufferCenter;
-                    while (ii < 0)
-                        ii += nGridPerSide;
-                    int jj = j - bufferCenter;
-                    while (jj < 0)
-                        jj += nGridPerSide;
-                    int index2 = ii * nGridPerSide + jj;
-                    dEBuffer[index2] = GeometryVector(outbuf[index].r * factor, 0.0);
-                }
-
-            free(st);
-            delete[] outbuf;
-            delete[] inbuf;
-        }
-        {
-            //strain buffer calculated by Fourier transform, another component
-            int numPixels = nGridPerSide * nGridPerSide;
-            kiss_fft_cpx *inbuf = new kiss_fft_cpx[numPixels];
-            kiss_fft_cpx *outbuf = new kiss_fft_cpx[numPixels];
-            //fill in inbuf
-            for (int i = 0; i < nGridPerSide; i++)
-                for (int j = 0; j < nGridPerSide; j++)
-                {
-                    int ii = (i > bufferCenter) ? i - nGridPerSide : i;
-                    int jj = (j > bufferCenter) ? j - nGridPerSide : j;
-                    double L = nGridPerSide * lGrid;
-                    double pm = 2 * M_PI * ii / L;
-                    double qn = 2 * M_PI * jj / L;
-                    double q2 = pm * pm + qn * qn;
-
-                    inbuf[i * nGridPerSide + j].r = -2 * pm * qn * (pm * pm - qn * qn) / q2 / q2;
-                    inbuf[i * nGridPerSide + j].i = 0;
-                }
-            inbuf[0].r = 0;
-
-            int temp[2] = {nGridPerSide, nGridPerSide};
-            kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
-            kiss_fftnd(st, inbuf, outbuf);
-            //fill in dEBuffer
-
-            for (int i = 0; i < nGridPerSide; i++)
-                for (int j = 0; j < nGridPerSide; j++)
-                {
-                    int index = i * nGridPerSide + j;
-                    int ii = i - bufferCenter;
-                    while (ii < 0)
-                        ii += nGridPerSide;
-                    int jj = j - bufferCenter;
-                    while (jj < 0)
-                        jj += nGridPerSide;
-                    int index2 = ii * nGridPerSide + jj;
-                    dEBuffer[index2].x[1] = outbuf[index].r * factor;
-                }
-
-            free(st);
-            delete[] outbuf;
-            delete[] inbuf;
-        }
-
-        //debug temp
-        // for (int i = 0; i < nGridPerSide; i++)
-        // {
-        //     for (int j = 0; j < nGridPerSide; j++)
-        //     {
-        //         int index = i * nGridPerSide + j;
-        //         std::cout << dEBuffer[index].x[0] << ' ';
-        //     }
-        //     std::cout << std::endl;
-        // }
-        // exit(0);
+      dS = -0.03;
     }
-    void initialize()
+    else if (r < 30)
     {
-        int nSite = nGridPerSide * nGridPerSide;
-        alle.resize(nSite);
-        alls.resize(nSite);
-        hasRearranged.resize(nSite);
-        rearrangingStep.resize(nSite);
-        for (int i = 0; i < nSite; i++)
-        {
-            this->alle[i].x[0] = this->eDistribution(this->rEngine);
-            this->alle[i].x[1] = this->eDistribution(this->rEngine);
-            this->alls[i] = this->sDistribution(this->rEngine);
-            this->hasRearranged[i] = 0;
-            this->rearrangingStep[i] = 0;
-        }
-        this->getBuffer();
+      dS = 1.0 / r / r / r;
+      dS -= 0.16 / r / r * std::sin(2.0 * std::atan2(dz, dxy));
     }
-    void shear()
+    else
     {
-        int nSite = nGridPerSide * nGridPerSide;
-#pragma omp parallel for schedule(static)
-        for (int i = 0; i < nSite; i++)
-        {
-            this->alle[i].x[0] += 1e-6;
-            this->hasRearranged[i] = 0;
-            this->rearrangingStep[i] = 0;
-        }
+      dS = 0.0;
     }
-    bool avalanche(std::string outputPrefix = "")
+
+    return dS;
+  }
+
+  /********************************************************************
+   * shear
+   *
+   * Function that shears all of the sites in the model.
+   *
+   *******************************************************************/ 
+  void shear()
+  {
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < nSite; i++)
     {
-        bool avalancheHappened = false;
-        int nSite = nGridPerSide * nGridPerSide;
-        int nStep = 0;
-        double deltaEnergy;
-#pragma omp parallel
-        {
-            int numRearrange = 1;
-            while (numRearrange > 0)
-            {
-#pragma omp for schedule(static)
-                for (int i = 0; i < nSite; i++)
-                    if (startRearranging(alle[i], alls[i]))
-                    {
-                        hasRearranged[i] = 1;
-                        rearrangingStep[i] = 1;
-                    }
-
-                //stop rearrangements that increases energy
-                for (int i = 0; i < nSite; i++)
-                {
-                    if (rearrangingStep[i] > 0)
-                    {
-                        //calculate energy difference
-                        deltaEnergy = 0;
-                        int rx = i / nGridPerSide;
-                        int ry = i % nGridPerSide;
-#pragma omp barrier
-#pragma omp for schedule(static) reduction(+ \
-                                           : deltaEnergy)
-                        for (int x = 0; x < nGridPerSide; x++)
-                        {
-                            int xInBuffer = bufferCenter - rx + x;
-                            while (xInBuffer < 0)
-                                xInBuffer += nGridPerSide;
-                            while (xInBuffer >= nGridPerSide)
-                                xInBuffer -= nGridPerSide;
-                            for (int y = 0; y < nGridPerSide; y++)
-                            {
-                                int yInBuffer = bufferCenter - ry + y;
-                                while (yInBuffer < 0)
-                                    yInBuffer += nGridPerSide;
-                                while (yInBuffer >= nGridPerSide)
-                                    yInBuffer -= nGridPerSide;
-                                GeometryVector &e = alle[x * nGridPerSide + y];
-                                GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
-
-                                if (ry != y || rx != x)
-                                    deltaEnergy += (e + de).Modulus2() - e.Modulus2();
-                                else
-                                    deltaEnergy -= e.Modulus2();
-                            }
-                        }
-#pragma omp single
-                        {
-                            //stop if energy increases
-                            // std::cout<<"de= "<<deltaEnergy<<' ';
-                            if (deltaEnergy > 0)
-                            {
-                                //std::cout << "rearrangement at stage " << int(rearrangingStep[i]) << " refuted due to energy criteria\n";
-                                rearrangingStep[i] = 0;
-                            }
-                        }
-                    }
-                }
-
-#pragma omp barrier
-                //rearrangement affect other sites parameters
-                numRearrange = 0;
-                for (int i = 0; i < nSite; i++)
-                {
-                    if (rearrangingStep[i] > 0)
-                    {
-                        //update softness and strain
-                        int rx = i / nGridPerSide;
-                        int ry = i % nGridPerSide;
-#pragma omp for schedule(static)
-                        for (int x = 0; x < nGridPerSide; x++)
-                        {
-                            int xInBuffer = bufferCenter - rx + x;
-                            while (xInBuffer < 0)
-                                xInBuffer += nGridPerSide;
-                            while (xInBuffer >= nGridPerSide)
-                                xInBuffer -= nGridPerSide;
-                            for (int y = 0; y < nGridPerSide; y++)
-                            {
-                                int yInBuffer = bufferCenter - ry + y;
-                                while (yInBuffer < 0)
-                                    yInBuffer += nGridPerSide;
-                                while (yInBuffer >= nGridPerSide)
-                                    yInBuffer -= nGridPerSide;
-                                //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
-                                GeometryVector &e = alle[x * nGridPerSide + y];
-                                GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
-                                e.AddFrom(de);
-                                alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
-                            }
-                        }
-                        numRearrange++;
-                    }
-                }
-#pragma omp single
-                {
-                    for (int i = 0; i < nSite; i++)
-                    {
-                        if (rearrangingStep[i] > 0)
-                        {
-                            //carry out the rearrangement
-                            rearrangingStep[i]++;
-                            if (rearrangingStep[i] > 4)
-                            {
-                                rearrangingStep[i] = 0;
-                            }
-                            alle[i] = 0.0;
-                            alls[i] = sDistribution(rEngine);
-                        }
-                    }
-
-                    if (numRearrange > 0)
-                    {
-                        avalancheHappened = true;
-                        std::cout << "num rearranger in this frame=" << numRearrange;
-                        double sum = 0.0;
-                        for (auto &e : this->alle)
-                            sum += e.Modulus2();
-                        std::cout << ", mean energy=" << sum / alle.size();
-
-                        sum = 0.0;
-                        for (auto &s : this->alls)
-                            sum += s;
-                        std::cout << ", mean s=" << sum / alls.size();
-                        std::cout << std::endl;
-
-                        if (outputPrefix != std::string(""))
-                        {
-                            std::stringstream ss;
-                            ss << outputPrefix << "_step_" << (nStep++);
-                            plot(this->rearrangingStep, nGridPerSide, ss.str());
-                        }
-                    }
-                }
-            }
-        }
-        return avalancheHappened;
+      this->alle[i].x[0] += 1e-6;
+      this->hasRearranged[i] = 0;
+      this->rearrangingStep[i] = 0;
     }
+  }
+
+  /********************************************************************
+   * deltaEnergy
+   *
+   * Function that determines the change in energy given that a grid
+   * point rearranges.
+   *
+   * Parameters
+   * ----------
+   *  site : int
+   *    site index of the rearranging grid point; site is in [0,nSite]
+   *
+   *******************************************************************/ 
+  double deltaEnergy(int site)
+  {
+    // Initializes:
+    //   - deltaEnergy (change in energy from making rearrangement)
+    //   - site_coor (position in i, j(, k) space) of site
+    //   - site_coor_prime (position in i, j(, k) space of other site)
+    double deltaEnergy = 0.0;
+    std::vector<int> site_coor, site_coor_prime;
+
+    // For each site', calculates relative position from rearranger
+    // then calculates the change in E given a change in strain.
+    unstack(site, site_coor);
+    #pragma omp parallel for reduction(+:deltaEnergy)
+    for (int site_prime = 0; site_prime < nSite; site_prime++)
+    {
+
+      // Calculates the difference in site positions taking into account PBC
+      unstack(site_prime, site_coor_prime);
+      for(int dd=0; dd<d; dd++)
+      {
+        double dx = site_coor[dd] - site_coor_prime[dd];
+        site_coor_prime[dd] = bufferCenter - dx;
+        site_coor_prime[dd] = (site_coor_prime[dd]+nGridPerSide) % nGridPerSide;
+      }
+      stack(site_coor_prime, site_prime);
+
+      // Calculates change in energy due to chane in strain at this site
+      if(site!=site_prime)
+      {
+        GeometryVector &e = alle[site_prime];
+        GeometryVector &de = dEBuffer[site_prime];
+        deltaEnergy += (e + de).Modulus2() - e.Modulus2();
+      }
+    }
+  }
+ 
+
+  /********************************************************************
+   * updateStrainAndSoft
+   *
+   * Function that updates the strain and softness of the system given
+   * a rearrangement at grid point (site)
+   *
+   * Parameters
+   * ----------
+   *  site : int
+   *    site index of the rearranging grid point; site is in [0,nSite]
+   *
+   *******************************************************************/ 
+  void updateStrainAndSoft(int site)
+  {
+
+    int site_relative;
+    double dx;
+    std::vector<int> site_coor, site_coor_prime;
+
+    // For each site', calculates relative position from rearranger
+    unstack(site, site_coor);
+    #pragma omp parallel for schedule(static)
+    for(int site_prime=0; site_prime<nGridPerSide; site_prime++)
+    {
+
+      // Gets current strain of site_prime
+      GeometryVector &e = alle[site_prime];
+
+      // Gets relative site relative to rearranger
+      unstack(site_prime, site_coor_prime);
+      for(int dd=0; dd<d; dd++)
+      {   
+        dx = site_coor[dd] - site_coor_prime[dd];
+        site_coor_prime[dd] = bufferCenter - dx; 
+        site_coor_prime[dd] = (site_coor[dd]+nGridPerSide) % nGridPerSide;
+      }
+      stack(site_coor_prime, site_relative);
+
+      // Gets change in strain for site positioned relative to
+      // rearranger
+      GeometryVector &de = dEBuffer[site_relative];
+
+      // Updates strain and softness
+      e.AddFrom(de);
+      alls[site] += dSBuffer[site_relative];
+    }
+
+  }
+
+  bool avalanche(std::string outputPrefix = "")
+  {
+    bool avalancheHappened = false;
+    int nStep = 0;
+    std::vector<int> site_coor(d);
+
+    // Avalanche continues until no more particles are rearranging
+    int numRearrange = 1;
+    while (numRearrange > 0)
+    {
+
+      // For each site:
+      //   (1) Checks if site has started to rearrange
+      //   (2) If site has started to rearrange, checks if energy is
+      //         increased. If it is, rearrangement is stopped.
+      for (int site = 0; site < nSite; site++)
+      {
+
+        // If site starts to rearrange marks
+        //   (1) The site has rearranged
+        //   (2) This is the first step that the site has rearranged
+        if (startRearranging(alle[site], alls[site]))
+        {
+          hasRearranged[site] = 1;
+          rearrangingStep[site] = 1;
+        }
+
+        if(rearrangingStep[site] > 0)
+        {   
+          // Stop rearrangement if energy increases
+          if (deltaEnergy(site) > 0)
+          {   
+            rearrangingStep[site] = 0;
+          }   
+        }
+      }
+
+
+      // Updates: 
+      //   - strains and softnesses around rearrangements 
+      //   - number of rearrangements occuring currently
+      //   - number of steps a rearrangement has taken
+      numRearrange = 0;
+      for (int site = 0; site < nSite; site++)
+      {
+        if (rearrangingStep[site] > 0)
+        {
+          updateStrainAndSoft(site);
+          numRearrange++;
+          rearrangingStep[site]++;
+        }
+      }
+
+
+      // Updates the rearrangement site itself
+      for (int site = 0; site < nSite; site++)
+      {
+        if (rearrangingStep[site] > 0)
+        {
+          //carry out the rearrangement
+          alle[site] = 0.0;
+          alls[site] = sDistribution(rEngine);
+        }
+      }
+
+      // If there has been 1 or more rearrangements, we say an 
+      // "avalanche" has occured.
+      if (numRearrange > 0)
+      {
+        avalancheHappened = true;
+
+        // Outputs number of rearrangements
+        std::cout << "num rearranger in this frame=" << numRearrange;
+
+        // Outputs mean energy
+        double sum = 0.0;
+        for (auto &e : this->alle)
+          sum += e.Modulus2();
+        std::cout << ", mean energy=" << sum / alle.size();
+
+        // Outputs mean softness
+        sum = 0.0;
+        for (auto &s : this->alls)
+          sum += s;
+        std::cout << ", mean s=" << sum / alls.size();
+        std::cout << std::endl;
+
+        // outputs something else
+        if (outputPrefix != std::string(""))
+        {
+          std::stringstream ss;
+          ss << outputPrefix << "_step_" << (nStep++);
+          plot(this->rearrangingStep, nGridPerSide, ss.str());
+        }
+      }
+
+    }
+
+    return avalancheHappened;
+
+  }
+
+
 };
 
 int main()
@@ -435,9 +539,12 @@ int main()
   //   - number of grid points per side (nGridPerSide)
   //   - length of each grid side (lenGridSide)
   //   - dimensionality of the space (d)
+  //   - distribution of grid strains (eDistribution)
+  //   - distribution of grid softnesses (sDistribution)
   const int nGridPerSide = 200;
   const double lenGridSide = 1.0;
-  const int d = 3;
+  const int d = 2;
+  const int nAvalanche = 100;
   std::normal_distribution<double> eDistribution(0.0, 0.01);
   std::normal_distribution<double> sDistribution(-2.0, 1.0);
 
@@ -450,12 +557,19 @@ int main()
   // Initializes model.
   gridModel model(nGridPerSide, lenGridSide, d, eDistribution, 
         sDistribution);
+
+
+
+
+  /*
   model.initialize();
 
-
+  // Shears until nAvalanche avalanches have occured.
   int numAvalanche = 0;
-  while (numAvalanche < 100)
+  while (numAvalanche < nAvalanche)
   {
+
+    // Shears model
     model.shear();
 
     std::stringstream ss;
@@ -469,4 +583,5 @@ int main()
       plot(model.hasRearranged, nGridPerSide, ss.str());
     }
   }
+  */
 }
