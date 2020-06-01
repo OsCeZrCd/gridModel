@@ -544,11 +544,7 @@ int main()
 
     const std::string ncFileName = "dump.nc";
 
-<<<<<<< HEAD
     const int nGridPerSide = 300;
-=======
-    const int nGridPerSide = 100;
->>>>>>> netCDF
     gridModel model(nGridPerSide, 1.0);
     if (fileExists(ncFileName))
     {
@@ -563,11 +559,7 @@ int main()
 
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
-<<<<<<< HEAD
-    while (numAvalanche < 100000)
-=======
     while (numAvalanche < 100000 && !fileExists("stop.txt"))
->>>>>>> netCDF
     {
         //std::cout << "shearing\n";
         model.shear();
