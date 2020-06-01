@@ -513,7 +513,7 @@ int main()
 
     const std::string ncFileName = "dump.nc";
 
-    const int nGridPerSide = 10;
+    const int nGridPerSide = 100;
     gridModel model(nGridPerSide, 1.0);
     if (fileExists(ncFileName))
     {
@@ -528,7 +528,7 @@ int main()
     
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
-    while (numAvalanche < 2)
+    while (numAvalanche < 100000 && !fileExists("stop.txt"))
     {
         //std::cout << "shearing\n";
         model.shear();
