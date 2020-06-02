@@ -13,6 +13,7 @@
 #include <curand.h>
 #include <curand_kernel.h>
 #include <string>
+#include <time.h>
 #include "GeometryVector.h"
 #include "kiss_fft.h"
 #include "kiss_fftnd.h"
@@ -154,6 +155,7 @@ public:
     int bufferCenter;
     double mean_softness;
     double dmean_softness;
+    double total_strain;
 
     std::vector<double> dSBuffer, alls;
     std::vector<GeometryVector> dEBuffer;
@@ -163,10 +165,15 @@ public:
     std::mt19937 rEngine;
     std::normal_distribution<double> sDistribution;
     std::normal_distribution<double> eDistribution;
+//    std::normal_distribution<double> deDistribution;
+    std::uniform_real_distribution<double> deDistribution;
+    std::normal_distribution<double> dsDistribution;
+
 
 //    std::gamma_distribution<double> coeffDistribution;
     std::normal_distribution<double> coeffDistribution;
     std::vector<double> yieldStrainCoeff;
+    std::vector<double> emittedStrainCoeff;
 
 //    float *hPos;
 //    float *dPos;
@@ -186,28 +193,60 @@ public:
 
 
 
-    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), coeffDistribution(1.5, 0.667), nGridPerSide(nGrid), lGrid(lGrid)
+    gridModel(int nGrid, double lGrid) : rEngine(time(NULL)), eDistribution(0.0, 0.00001), deDistribution(0.0, 1.0), sDistribution(-0.2, 2.0), dsDistribution(0.0, 0.5), coeffDistribution(1.0, 0.14), nGridPerSide(nGrid), lGrid(lGrid)
     {
     }
 
     bool startRearranging(double e1, double e2, double s, int i)
     {
-        double yieldStrain = 0.07 - 0.01 * s;
-        if (yieldStrain < 0.05)
-            yieldStrain = 0.05;
+        double yieldStrain = 0.018 - 0.002 * s;
+        if (yieldStrain < 0.014)
+            yieldStrain = 0.014;
         yieldStrain*=yieldStrainCoeff[i];
 
-        double mod2 = e1*e1 + e2*e2;
+//        double mod2 = e1*e1 + e2*e2;
+          double mod2 = e1*e1;
 
-        return mod2 > yieldStrain * yieldStrain;
+//          double mod2_2 = sqrt( e1*e1);
+
+//          if (mod2 >= yieldStrain)
+//          {
+//          	std::cout << "mod2:  " << mod2_2 << "   yield strain:  " << yieldStrain << "   pid:  " << i << std::endl;
+//
+//          }
+
+          return sqrt(mod2) >= yieldStrain;
+    }
+
+    double checkRearranging(double e1, double e2, double s, int i)
+    {
+        double yieldStrain = 0.018 - 0.002 * s;
+        if (yieldStrain < 0.014)
+            yieldStrain = 0.014;
+        yieldStrain*=yieldStrainCoeff[i];
+
+//        double mod2 = sqrt( e1*e1 + e2*e2);
+
+        double mod2 = sqrt( e1*e1);
+
+        if (mod2 >= yieldStrain)
+        {
+        	std::cout << "mod2:  " << mod2 << "   yield strain:  " << yieldStrain << "   pid:  " << i << std::endl;
+        	return 0.0;
+
+        }
+
+//        return yieldStrain - mod2;
+        return yieldStrain - e1;
     }
 
     double dsFromRearranger(double dx, double dy, double r)
     {
-        if (r < 4.0)
-            return -0.03;
+        if (r < 1.0)
+             return 0.00;
         else if (r < 30)
-            return 1.0 / r / r / r - 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
+            return 1.0*0.52 / r / r / r - 1.0*0.16 / r / r * (std::sin(2.0 * std::atan2(dy, dx)));
+//        	return  - 1.0*0.16 / r / r * (std::sin(2.0 * std::atan2(dy, dx)));
         else
             return 0.0;
     }
@@ -254,7 +293,8 @@ public:
             kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
             kiss_fftnd(st, inbuf, outbuf);
             //fill in dEBuffer
-            factor = 0.02 / std::fabs(outbuf[0].r);
+//            factor = 0.006 / std::fabs(outbuf[0].r);
+            factor = 1.0 / std::fabs(outbuf[0].r);
 
             for (int i = 0; i < nGridPerSide; i++)
                 for (int j = 0; j < nGridPerSide; j++)
@@ -267,7 +307,7 @@ public:
                     while (jj < 0)
                         jj += nGridPerSide;
                     int index2 = ii * nGridPerSide + jj;
-                    dEBuffer[index2] = GeometryVector(outbuf[index].r * factor, 0.0);
+                    dEBuffer[index2] = GeometryVector(outbuf[index].r * factor - 1.0/(double)numPixels, 0.0);
                 }
 
             free(st);
@@ -323,10 +363,15 @@ public:
     void initialize()
     {
         int nSite = nGridPerSide * nGridPerSide;
+        total_strain = 0;
         alls.resize(nSite);
         hasRearranged.resize(nSite);
         rearrangingStep.resize(nSite);
         yieldStrainCoeff.resize(nSite);
+        emittedStrainCoeff.resize(nSite);
+
+        mean_softness = 0;
+        dmean_softness = 1E-6;
 
         // initialize host arrays
         hEbuffer_xy = new double[nSite];
@@ -334,8 +379,6 @@ public:
         hE_xy = new double[nSite];
         hE_xx = new double[nSite];
         henergy = new double[1];
-
-
 
         memset(hEbuffer_xy, 0, nSite*sizeof(double));
         memset(hEbuffer_xx, 0, nSite*sizeof(double));
@@ -353,6 +396,7 @@ public:
 
             this->alls[i] = this->sDistribution(this->rEngine); //initialize softness with a distrbution s
             this->yieldStrainCoeff[i] = this->coeffDistribution(this->rEngine);
+//            this->emittedStrainCoeff[i] = this->deDistribution(this->rEngine);
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
 
@@ -362,7 +406,7 @@ public:
 
         }
 
-//        writebinary_test( hEbuffer_xy , nGridPerSide);
+        writebinary_test( hEbuffer_xy , nGridPerSide);
 //        writebinary_test( hEbuffer_xx , nGridPerSide);
 
 
@@ -385,19 +429,39 @@ public:
 
     void shear()
     {
-
+        double sum = 0.0;
+        for (auto &s : this->alls)
+            sum += s;
+        double mean_s = sum / alls.size();
         int nSite = nGridPerSide * nGridPerSide;
+        double stepsize = 1.0;
+        for (int i = 0; i < nSite; i++)
+        {
+        	double step_i = checkRearranging(hE_xy[i],hE_xx[i], alls[i],i);
+        	stepsize = min(step_i,stepsize);
+        }
+
+        stepsize = max(0.0,stepsize);
+
+        std::cout << "step size is: " << stepsize << std::endl;
+
+        total_strain += stepsize;
+
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
-
-            this->hE_xy[i] += 1.0e-6;
+//            double E_increament = 1.0 + (this->alls[i] - mean_s) * 0.0;    // assign additional strain to soft particles
+//            E_increament = std::max(0.0,E_increament);
+        	double E_increament = 1.0 + 1E-10;
+            this->hE_xy[i] += stepsize * E_increament;
             this->hE_xx[i] += 0.0e-6;
 
-            this->alls[i] += dmean_softness;
+//            this->alls[i] += dmean_softness;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
+
+//        mean_softness = mean_softness + dmean_softness;
     }
 
 
@@ -416,59 +480,63 @@ public:
                     if (startRearranging(hE_xy[i],hE_xx[i], alls[i],i))
                     {
                         rearrangingStep[i] = 1;
+                        emittedStrainCoeff[i] = eDistribution(rEngine);
                     }
-
+                    else
+                    {
+                    	rearrangingStep[i] = 0;
+                    }
 #pragma omp barrier
 #pragma omp single
           {
-//        	  // initiate a thrust vector to collect energy change for all potential site
-              thrust::host_vector<double> h_energy(nSite);
-              thrust::fill(h_energy.begin(),h_energy.end(), 0.0);
-              thrust::device_vector<double> d_energy = h_energy;
-              double *d_energy_pt = thrust::raw_pointer_cast( &d_energy[0] );
-
-              // initiate a thrust vector to collect the index of all potential site
-              thrust::host_vector<int> h_pindex(nSite);
-              thrust::fill(h_pindex.begin(),h_pindex.end(), 0);
-              thrust::device_vector<int> d_pindex = h_pindex;
-              int *d_pindex_pt = thrust::raw_pointer_cast( &d_pindex[0] );
-
-              // collect the index of all potential sites
-              int site_2_check=0;
-              for (int i = 0; i < nSite; i++)
-              {
-            	  if (rearrangingStep[i] > 0){
-            		  d_pindex[site_2_check] = i;
-            		  site_2_check+=1;
-            	  }
-
-              }
-              std::cout<< "total potential site checked: " << site_2_check << std::endl;
-
-              size_t bytes_E = nSite*sizeof(double);
-              cudaMemcpy(dE_xy, hE_xy, bytes_E, cudaMemcpyHostToDevice);
-              cudaMemcpy(dE_xx, hE_xx, bytes_E, cudaMemcpyHostToDevice);
-
-              //stop rearrangements that increases energy
-
-              // the idea is to assign each grid position to a gpu-thread, within each grid position, we loop and calculate energy change for all potential sites
-              int numBlocks, numThreads;
-              int nSite = nGridPerSide * nGridPerSide;
-              computeGridSize(nSite, 256, numBlocks, numThreads);
-
-              energy_kernal <<< numBlocks, numThreads >>> (nGridPerSide, dE_xy, dE_xx, dEbuffer_xy, dEbuffer_xx, d_pindex_pt, d_energy_pt, site_2_check);
-
-              cudaDeviceSynchronize();
-
-              for (int i = 0; i < site_2_check; i++)
-              {
-//            	  std::cout << "energy change: " << d_energy[i] << std::endl;
-            	  if (d_energy[i]>0){
-            		  int index_grid = d_pindex[i];
-            		  rearrangingStep[index_grid] = 0;
-            	  }
-
-              }
+////        	  // initiate a thrust vector to collect energy change for all potential site
+//              thrust::host_vector<double> h_energy(nSite);
+//              thrust::fill(h_energy.begin(),h_energy.end(), 0.0);
+//              thrust::device_vector<double> d_energy = h_energy;
+//              double *d_energy_pt = thrust::raw_pointer_cast( &d_energy[0] );
+//
+//              // initiate a thrust vector to collect the index of all potential site
+//              thrust::host_vector<int> h_pindex(nSite);
+//              thrust::fill(h_pindex.begin(),h_pindex.end(), 0);
+//              thrust::device_vector<int> d_pindex = h_pindex;
+//              int *d_pindex_pt = thrust::raw_pointer_cast( &d_pindex[0] );
+//
+//              // collect the index of all potential sites
+//              int site_2_check=0;
+//              for (int i = 0; i < nSite; i++)
+//              {
+//            	  if (rearrangingStep[i] > 0){
+//            		  d_pindex[site_2_check] = i;
+//            		  site_2_check+=1;
+//            	  }
+//
+//              }
+//              std::cout<< "total potential site checked: " << site_2_check << std::endl;
+//
+//              size_t bytes_E = nSite*sizeof(double);
+//              cudaMemcpy(dE_xy, hE_xy, bytes_E, cudaMemcpyHostToDevice);
+//              cudaMemcpy(dE_xx, hE_xx, bytes_E, cudaMemcpyHostToDevice);
+//
+//              //stop rearrangements that increases energy
+//
+//              // the idea is to assign each grid position to a gpu-thread, within each grid position, we loop and calculate energy change for all potential sites
+//              int numBlocks, numThreads;
+//              int nSite = nGridPerSide * nGridPerSide;
+//              computeGridSize(nSite, 256, numBlocks, numThreads);
+//
+//              energy_kernal <<< numBlocks, numThreads >>> (nGridPerSide, dE_xy, dE_xx, dEbuffer_xy, dEbuffer_xx, d_pindex_pt, d_energy_pt, site_2_check);
+//
+//              cudaDeviceSynchronize();
+//
+//              for (int i = 0; i < site_2_check; i++)
+//              {
+////            	  std::cout << "energy change: " << d_energy[i] << std::endl;
+//            	  if (d_energy[i]>0){
+//            		  int index_grid = d_pindex[i];
+//            		  rearrangingStep[index_grid] = 0;
+//            	  }
+//
+//              }
             }
 
 
@@ -490,6 +558,8 @@ public:
                             xInBuffer += nGridPerSide;
                         while (xInBuffer >= nGridPerSide)
                             xInBuffer -= nGridPerSide;
+                        // if (xInBuffer>=0 && xInBuffer<nGridPerSide)
+                        // {
                         for (int y = 0; y < nGridPerSide; y++)
                         {
                             int yInBuffer = bufferCenter - ry + y;
@@ -497,31 +567,41 @@ public:
                                  yInBuffer += nGridPerSide;
                              while (yInBuffer >= nGridPerSide)
                                  yInBuffer -= nGridPerSide;
-                            hE_xx[x * nGridPerSide + y] +=  hEbuffer_xx[xInBuffer * nGridPerSide + yInBuffer];
-                            hE_xy[x * nGridPerSide + y] +=  hEbuffer_xy[xInBuffer * nGridPerSide + yInBuffer];
+//                            if (yInBuffer>=0 && yInBuffer<nGridPerSide)
+//                            {
+
+//                            hE_xx[x * nGridPerSide + y] +=  hEbuffer_xx[xInBuffer * nGridPerSide + yInBuffer] * emittedStrainCoeff[i];
+                            hE_xy[x * nGridPerSide + y] +=  hEbuffer_xy[xInBuffer * nGridPerSide + yInBuffer] * ( hE_xy[i] - emittedStrainCoeff[i]) ;
 
                             alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
+//                            }
                         }
+                        // }
                     }
+//                    numRearrange++;
                     }
                 }
 
+                // copy new device strain array back to the geometry vector vector
+
 #pragma omp single
                 {
-                	numRearrange=0;
+                	numRearrange=0; // this is temporary----------------------------------------------------
 
                     for (int i = 0; i < nSite; i++)
                     {
                         if (rearrangingStep[i] > 0)
                         {
+                        	total_strain += (hE_xy[i] - emittedStrainCoeff[i]) / ( (double)nGridPerSide * (double)nGridPerSide  );
                             //carry out the rearrangement
                             rearrangingStep[i]++;
                             hasRearranged[i] = 1;
-                            hE_xy[i] = 0.0;
-                            hE_xx[i] = 0.0;
+                            hE_xy[i] = emittedStrainCoeff[i];
+//                            hE_xx[i] = eDistribution(rEngine);
 
-                            alls[i] = sDistribution(rEngine);
+                            alls[i] = dsDistribution(rEngine) + 0.25 - 0.4 * alls[i];
                             yieldStrainCoeff[i] = coeffDistribution(rEngine);
+//                            emittedStrainCoeff[i] = deDistribution(rEngine);
 
                             numRearrange++;
                         }
@@ -540,71 +620,71 @@ public:
             }
 
         }
+
+//      std::cout << "got here" << std::endl;
         return numRe_frame;
     }
 };
 
 int main()
 {
-    const int nGridPerSide = 300;
+    const int nGridPerSide = 512;
     gridModel model(nGridPerSide, 1.0);
+//    std::cout<<"before initialization"<<std::endl;
     model.initialize();
     int numAvalanche = 0;
     int strainstep = 0;
     double meanS = 0.0;
+
     std::cout<<"initialized"<<std::endl;
-    int total_re=0;
+//    model.shear_cuda();
+    int numRe = 0;
 //
-    while (strainstep<10000000 && meanS<1.0)
+    while (strainstep<200000 && meanS<2.0)
     {
-        model.shear();
 
-        std::stringstream ss;
-        ss << "avalanche_" << numAvalanche;
-
-        int numRe = model.avalanche(ss.str());
-
-        if (numRe>0)
-        {
 
         double sum = 0.0;
         for (auto &s : model.alls)
            sum += s;
 
         meanS = sum / model.alls.size();
+        std::ofstream re_mean_data;
+        re_mean_data.open ("data_mean.bin", std::ios::out | std::ios::binary | std::fstream::app);
+        double nstep = strainstep;
+        re_mean_data.write((char*)&nstep,sizeof(double));
+        re_mean_data.write((char*)&meanS,sizeof(double));
+        double etotal=model.total_strain;
+        double stotal = 0;
+        for (int i = 0; i < nGridPerSide*nGridPerSide; i++)
+         {
+          stotal +=  model.hE_xy[i] ;
+         }
+        re_mean_data.write((char*)&stotal,sizeof(double));
+        re_mean_data.write((char*)&etotal,sizeof(double));
+        re_mean_data.close();
+        std::cout << "Currently at step: " << strainstep << ",  total strain is: "<<   model.total_strain  <<", Number of rearrangement:"<<  numRe;
+        std::cout << ", mean s=" << sum / model.alls.size() << ", total energy=" << etotal << std::endl;
+
+
+        model.shear();
+
+        std::stringstream ss;
+        ss << "avalanche_" << numAvalanche;
+
+        numRe = model.avalanche(ss.str());
+//        int numRe = 0;
+
 
         writebinary<bool>(model.hasRearranged, nGridPerSide);
 
-        //this part write the softness field
-//        strainstep+=1;
-//        if ((strainstep-1)%50==0)
+        strainstep+=1;
+//        if ((strainstep-1)%500==0)
 //        {
 //            writebinary_scalar<double>(model.alls, nGridPerSide);
 //        }
 
-        // this part output the mean softness and mean energy
-//        std::ofstream re_mean_data;
-//        re_mean_data.open ("data_mean.bin", std::ios::out | std::ios::binary | std::fstream::app);
-//        double nstep = strainstep;
-//        re_mean_data.write((char*)&nstep,sizeof(double));
-//        re_mean_data.write((char*)&meanS,sizeof(double));
-//
-//        double etotal=0;
-//        for (int i = 0; i < nGridPerSide*nGridPerSide; i++)
-//         {
-//          etotal += model.hE_xx[i] * model.hE_xx[i] + model.hE_xy[i] * model.hE_xy[i];
-//         }
-//
-//        re_mean_data.write((char*)&etotal,sizeof(double));
-//        re_mean_data.close();
 
-        total_re = total_re+1;
-
-//        std::cout << "Currently at step: " << strainstep << ", Number of rearrangement:"<<  numRe;
-//        std::cout << ", mean s=" << sum / model.alls.size() << ", total energy=" << etotal << std::endl;
-        }
-        strainstep+=1;
-        std::cout << "Step: " << strainstep << ", Num rearrangement: "<<  numRe << "  total avalanches: " << total_re << std::endl;
 
     }
 }
