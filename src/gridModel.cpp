@@ -38,13 +38,24 @@ public:
     int bufferCenter;
 
     std::vector<double> dSBuffer, alls;
-    std::vector<GeometryVector> dEBuffer, alle; //e is strain
+
+    //e is elastic strain
+    //dEBuffer[0] and [1] correspond to
+    // [0] response from converting an xy elastic strain to plastic strain
+    // [1] response from converting an xx deviatoric elastic strain to plastic strain
+    std::vector<GeometryVector> dEBuffer[::MaxDimension], alle;
+
     std::vector<int> rearrangingStep;
     std::vector<char> hasRearranged;
 
     std::mt19937 rEngine;
+    //distribution of softness after a rearrangement
     std::normal_distribution<double> sDistribution;
+    //distribution of strain initially
     std::normal_distribution<double> eDistribution;
+    //distribution of how much of a block's original strain is redistributed in a rearrangement
+    //1.0 means all of its strain is redistributed
+    std::normal_distribution<double> rearrangingIntensityDistribution;
 
     std::gamma_distribution<double> coeffDistribution;
     std::vector<double> yieldStrainCoeff;
@@ -53,7 +64,16 @@ public:
     netCDF::NcVar eVar, sVar, hasRearrangedVar;
     netCDF::NcVar coeffVar;
 
-    gridModel(int nGrid, double lGrid) : rEngine(0), eDistribution(0.0, 0.01), sDistribution(-2.0, 2.0), coeffDistribution(1.5, 0.667), nGridPerSide(nGrid), lGrid(lGrid)
+    //length of a rearrangement in frames
+    int rearrangeFrameLength;
+
+    gridModel(int nGrid, double lGrid) : rEngine(0),
+                                         eDistribution(0.0, 0.01),
+                                         sDistribution(-2.0, 2.0),
+                                         coeffDistribution(1.5, 0.667),
+                                         rearrangingIntensityDistribution(1.0, 0.01),
+                                         rearrangeFrameLength(5),
+                                         nGridPerSide(nGrid), lGrid(lGrid)
     {
         this->allocate();
         this->getBuffer();
@@ -169,7 +189,10 @@ public:
     void getBuffer()
     {
         bufferCenter = nGridPerSide / 2;
-        dEBuffer.resize(nGridPerSide * nGridPerSide);
+
+        for (int i = 0; i < MaxDimension; i++)
+            dEBuffer[i].resize(nGridPerSide * nGridPerSide);
+
         dSBuffer.resize(nGridPerSide * nGridPerSide);
         for (int i = 0; i < nGridPerSide; i++)
             for (int j = 0; j < nGridPerSide; j++)
@@ -178,13 +201,13 @@ public:
                 double dy = (j - bufferCenter) * lGrid;
                 double r = std::sqrt(dx * dx + dy * dy);
                 int index = i * nGridPerSide + j;
-                // dEBuffer[index] = eFromRearranger(dx, dy, r);
                 dSBuffer[index] = dsFromRearranger(dx, dy, r);
             }
 
-        double factor;
+        double meanStrainDecrement = 1.0 / nGridPerSide / nGridPerSide;
+        double factor[MaxDimension];
         {
-            //strain buffer calculated by Fourier transform
+            //strain buffer calculated by Fourier transform, xy to xy response
             int numPixels = nGridPerSide * nGridPerSide;
             kiss_fft_cpx *inbuf = new kiss_fft_cpx[numPixels];
             kiss_fft_cpx *outbuf = new kiss_fft_cpx[numPixels];
@@ -208,7 +231,9 @@ public:
             kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
             kiss_fftnd(st, inbuf, outbuf);
             //fill in dEBuffer
-            factor = 0.02 / std::fabs(outbuf[0].r);
+            //the interaction kernel at the rearranging site is -1.0 because
+            //the rearranging site loses all of the redistributed strain
+            factor[0] = (-1.0 + meanStrainDecrement) / outbuf[0].r;
 
             for (int i = 0; i < nGridPerSide; i++)
                 for (int j = 0; j < nGridPerSide; j++)
@@ -221,7 +246,7 @@ public:
                     while (jj < 0)
                         jj += nGridPerSide;
                     int index2 = ii * nGridPerSide + jj;
-                    dEBuffer[index2] = GeometryVector(outbuf[index].r * factor, 0.0);
+                    dEBuffer[0][index2] = GeometryVector(outbuf[index].r * factor[0] - meanStrainDecrement, 0.0);
                 }
 
             free(st);
@@ -229,7 +254,56 @@ public:
             delete[] inbuf;
         }
         {
-            //strain buffer calculated by Fourier transform, another component
+            //strain buffer calculated by Fourier transform, xx to xx response
+            int numPixels = nGridPerSide * nGridPerSide;
+            kiss_fft_cpx *inbuf = new kiss_fft_cpx[numPixels];
+            kiss_fft_cpx *outbuf = new kiss_fft_cpx[numPixels];
+            //fill in inbuf
+            for (int i = 0; i < nGridPerSide; i++)
+                for (int j = 0; j < nGridPerSide; j++)
+                {
+                    int ii = (i > bufferCenter) ? i - nGridPerSide : i;
+                    int jj = (j > bufferCenter) ? j - nGridPerSide : j;
+                    double L = nGridPerSide * lGrid;
+                    double pm = 2 * M_PI * ii / L;
+                    double qn = 2 * M_PI * jj / L;
+                    double q2 = pm * pm + qn * qn;
+
+                    double temp = (pm * pm - qn * qn);
+                    inbuf[i * nGridPerSide + j].r = -1 * temp * temp / q2 / q2;
+                    inbuf[i * nGridPerSide + j].i = 0;
+                }
+            inbuf[0].r = 0;
+
+            int temp[2] = {nGridPerSide, nGridPerSide};
+            kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
+            kiss_fftnd(st, inbuf, outbuf);
+            //fill in dEBuffer
+            //the interaction kernel at the rearranging site is -1.0 because
+            //the rearranging site loses all of the redistributed strain
+            factor[1] = (-1.0 + meanStrainDecrement) / outbuf[0].r;
+
+            for (int i = 0; i < nGridPerSide; i++)
+                for (int j = 0; j < nGridPerSide; j++)
+                {
+                    int index = i * nGridPerSide + j;
+                    int ii = i - bufferCenter;
+                    while (ii < 0)
+                        ii += nGridPerSide;
+                    int jj = j - bufferCenter;
+                    while (jj < 0)
+                        jj += nGridPerSide;
+                    int index2 = ii * nGridPerSide + jj;
+                    dEBuffer[1][index2] = GeometryVector(0.0, outbuf[index].r * factor[1] - meanStrainDecrement);
+                }
+
+            free(st);
+            delete[] outbuf;
+            delete[] inbuf;
+        }
+
+        {
+            //strain buffer calculated by Fourier transform, xy-to-xx and xx-to-xy component, which has the same formula
             int numPixels = nGridPerSide * nGridPerSide;
             kiss_fft_cpx *inbuf = new kiss_fft_cpx[numPixels];
             kiss_fft_cpx *outbuf = new kiss_fft_cpx[numPixels];
@@ -265,7 +339,8 @@ public:
                     while (jj < 0)
                         jj += nGridPerSide;
                     int index2 = ii * nGridPerSide + jj;
-                    dEBuffer[index2].x[1] = outbuf[index].r * factor;
+                    dEBuffer[0][index2].x[1] = outbuf[index].r * factor[0];
+                    dEBuffer[1][index2].x[0] = outbuf[index].r * factor[1];
                 }
 
             free(st);
@@ -274,15 +349,18 @@ public:
         }
 
         //debug temp
+        // std::cout << std::scientific;
+        // std::cout << factor[0] << " " << factor[1] << std::endl;
+        // std::vector<double> temp(nGridPerSide*nGridPerSide, 0.0);
         // for (int i = 0; i < nGridPerSide; i++)
         // {
         //     for (int j = 0; j < nGridPerSide; j++)
         //     {
         //         int index = i * nGridPerSide + j;
-        //         std::cout << dEBuffer[index].x[0] << ' ';
+        //         temp[index]=dEBuffer[1][index].x[1];
         //     }
-        //     std::cout << std::endl;
         // }
+        // plot(temp, nGridPerSide, "e11");
         // exit(0);
     }
     void allocate()
@@ -355,7 +433,7 @@ public:
             //netCDF use a fillValue to indicate non-written value
             //assume the zeroth element of alle and alls are fillValue
             //if any of the read data is not fillValue, frame data is valid, mission complete
-            //otherwise, frame data is invalid, let the loop continue;
+            //otherwise, frame data is invalid, see if an earlier frame is valid by letting the loop continue;
             double &fillEValue = alle[0].x[0];
             double &fillSValue = alls[0];
             double &fillCValue = yieldStrainCoeff[0];
@@ -387,65 +465,26 @@ public:
         bool avalancheHappened = false;
         int nSite = nGridPerSide * nGridPerSide;
         int nStep = 0;
-        double deltaEnergy;
+
+        //if rearranging, the value is how much strain is redistributed per frame
+        std::vector<GeometryVector> rearrangingIntensity;
+        rearrangingIntensity.resize(nSite);
+
 #pragma omp parallel
         {
             int numRearrange = 1;
             while (numRearrange > 0)
             {
-#pragma omp for schedule(static)
-                for (int i = 0; i < nSite; i++)
-                    if (startRearranging(alle[i], alls[i], i))
-                    {
-                        rearrangingStep[i] = 1;
-                    }
-
-                //stop rearrangements that increases energy
-                for (int i = 0; i < nSite; i++)
-                {
-                    if (rearrangingStep[i] > 0)
-                    {
-                        //calculate energy difference
-                        deltaEnergy = 0;
-                        int rx = i / nGridPerSide;
-                        int ry = i % nGridPerSide;
-#pragma omp barrier
-#pragma omp for schedule(static) reduction(+ \
-                                           : deltaEnergy)
-                        for (int x = 0; x < nGridPerSide; x++)
-                        {
-                            int xInBuffer = bufferCenter - rx + x;
-                            while (xInBuffer < 0)
-                                xInBuffer += nGridPerSide;
-                            while (xInBuffer >= nGridPerSide)
-                                xInBuffer -= nGridPerSide;
-                            for (int y = 0; y < nGridPerSide; y++)
-                            {
-                                int yInBuffer = bufferCenter - ry + y;
-                                while (yInBuffer < 0)
-                                    yInBuffer += nGridPerSide;
-                                while (yInBuffer >= nGridPerSide)
-                                    yInBuffer -= nGridPerSide;
-                                GeometryVector &e = alle[x * nGridPerSide + y];
-                                GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
-
-                                if (ry != y || rx != x)
-                                    deltaEnergy += (e + de).Modulus2() - e.Modulus2();
-                                else
-                                    deltaEnergy -= e.Modulus2();
-                            }
-                        }
 #pragma omp single
+                {
+                    for (int i = 0; i < nSite; i++)
+                        if (rearrangingStep[i] == 0 && startRearranging(alle[i], alls[i], i))
                         {
-                            //stop if energy increases
-                            // std::cout<<"de= "<<deltaEnergy<<' ';
-                            if (deltaEnergy > 0)
-                            {
-                                //std::cout << "rearrangement at stage " << int(rearrangingStep[i]) << " refuted due to energy criteria\n";
-                                rearrangingStep[i] = 0;
-                            }
+                            rearrangingStep[i] = 1;
+                            rearrangingIntensity[i] = alle[i] * (1.0 / rearrangeFrameLength);
+                            rearrangingIntensity[i].x[0] *= this->rearrangingIntensityDistribution(this->rEngine);
+                            rearrangingIntensity[i].x[1] *= this->rearrangingIntensityDistribution(this->rEngine);
                         }
-                    }
                 }
 
 #pragma omp barrier
@@ -475,8 +514,12 @@ public:
                                     yInBuffer -= nGridPerSide;
                                 //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
                                 GeometryVector &e = alle[x * nGridPerSide + y];
-                                GeometryVector &de = dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
-                                e.AddFrom(de);
+
+                                for (int j = 0; j < MaxDimension; j++)
+                                {
+                                    GeometryVector &de = dEBuffer[j][xInBuffer * nGridPerSide + yInBuffer];
+                                    e.AddFrom(rearrangingIntensity[i].x[j] * de);
+                                }
                                 alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
                             }
                         }
@@ -489,16 +532,15 @@ public:
                     {
                         if (rearrangingStep[i] > 0)
                         {
-                            //carry out the rearrangement
+                            //rearrangement has a fixed number of steps
                             rearrangingStep[i]++;
-                            hasRearranged[i] = 1;
-                            // if (rearrangingStep[i] > 4)
-                            // {
-                            //     rearrangingStep[i] = 0;
-                            // }
-                            alle[i] = 0.0;
-                            alls[i] = sDistribution(rEngine);
-                            yieldStrainCoeff[i] = coeffDistribution(rEngine);
+                            if (rearrangingStep[i] > this->rearrangeFrameLength)
+                            {
+                                rearrangingStep[i] = 0;
+                                hasRearranged[i] = 1;
+                                alls[i] = sDistribution(rEngine);
+                                yieldStrainCoeff[i] = coeffDistribution(rEngine);
+                            }
                         }
                     }
 

@@ -13,9 +13,6 @@ const DimensionType MaxDimension=2;
 #include <fstream>
 #include <cmath>
 
-
-
-//In debug mode, this class also records the dimension of the GeometryVector.
 class GeometryVector
 {
 public:
@@ -23,19 +20,6 @@ public:
 	GeometryVector()
 	{
 		for(int i=0; i< ::MaxDimension; i++)
-			this->x[i]=0;
-	}
-	//do not change this "int" to "DimensionType"!
-	//otherwize GeometryVector(2) would be ambiguous.
-	GeometryVector(int dimension)
-	{
-		for(int i=0; i< ::MaxDimension; i++)
-			this->x[i]=0;
-	}
-	GeometryVector(double xx)
-	{
-		this->x[0]=xx;
-		for(int i=1; i< ::MaxDimension; i++)
 			this->x[i]=0;
 	}
 	GeometryVector(double xx, double yy)

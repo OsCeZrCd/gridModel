@@ -6,8 +6,8 @@ objDebug = $(src:.c=.oDebug) $(ccsrc:.cpp=.oDebug)
 CXXFLAGS =-O3 -D NDEBUG -fopenmp -std=gnu++11 -march=native
 LDFLAGS =-O3 -fopenmp -std=gnu++11 -lmgl -lnetcdf_c++4 -march=native
 
-CXXDEBUGFLAGS =-g -O0 -std=gnu++11 -march=native 
-LDDEBUGFLAGS =-g -O0 -std=gnu++11 -lmgl -lnetcdf_c++4 -march=native
+CXXDEBUGFLAGS =-g -O0 -fopenmp -std=gnu++11 -march=native
+LDDEBUGFLAGS =-g -O0 -fopenmp -std=gnu++11 -lmgl -lnetcdf_c++4 -march=native
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -o $@ -c $<
