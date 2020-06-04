@@ -204,8 +204,16 @@ public:
                 dSBuffer[index] = dsFromRearranger(dx, dy, r);
             }
 
+        //require that dsBuffer sums to zero
+        double sum=0.0;
+        for (auto ds : dSBuffer)
+           sum+=ds;
+        dSBuffer[bufferCenter*nGridPerSide+bufferCenter] -= sum;
+        std::cout<<"rearranger ds="<<dSBuffer[bufferCenter*nGridPerSide+bufferCenter]<<std::endl;
+
         double meanStrainDecrement = 1.0 / nGridPerSide / nGridPerSide;
         double factor[MaxDimension];
+
         {
             //strain buffer calculated by Fourier transform, xy to xy response
             int numPixels = nGridPerSide * nGridPerSide;
@@ -538,7 +546,7 @@ public:
                             {
                                 rearrangingStep[i] = 0;
                                 hasRearranged[i] = 1;
-                                alls[i] = sDistribution(rEngine);
+                                //alls[i] = sDistribution(rEngine);
                                 yieldStrainCoeff[i] = coeffDistribution(rEngine);
                             }
                         }
