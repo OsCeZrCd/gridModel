@@ -169,6 +169,7 @@ public:
         }
     }
 
+    //if you want to change the yielding criteria, also change "xyStrainDistanceToRearranging"
     bool startRearranging(GeometryVector e, double s, int i)
     {
         double yieldStrain = 0.07 - 0.01 * s;
@@ -177,6 +178,25 @@ public:
         yieldStrain *= yieldStrainCoeff[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
+    double xyStrainDistanceToRarranging(GeometryVector e, double s, int i)
+    {
+        double yieldStrain = 0.07 - 0.01 * s;
+        if (yieldStrain < 0.05)
+            yieldStrain = 0.05;
+        yieldStrain *= yieldStrainCoeff[i];
+        if (e.Modulus2() > yieldStrain * yieldStrain)
+            return 0.0;
+        else
+            return std::sqrt(yieldStrain * yieldStrain - e.x[1] * e.x[1]) - e.x[0];
+    }
+    double minimumXyStrainDistanceToRarranging()
+    {
+        double minimum = std::numeric_limits<double>::max();
+        for (int i = 0; i < this->alle.size(); i++)
+            minimum = std::min(minimum, this->xyStrainDistanceToRarranging(this->alle[i], this->alls[i], i));
+        return minimum;
+    }
+
     double dsFromRearranger(double dx, double dy, double r)
     {
         if (r < 4.0)
@@ -205,11 +225,11 @@ public:
             }
 
         //require that dsBuffer sums to zero
-        double sum=0.0;
+        double sum = 0.0;
         for (auto ds : dSBuffer)
-           sum+=ds;
-        dSBuffer[bufferCenter*nGridPerSide+bufferCenter] -= sum;
-        std::cout<<"rearranger ds="<<dSBuffer[bufferCenter*nGridPerSide+bufferCenter]<<std::endl;
+            sum += ds;
+        dSBuffer[bufferCenter * nGridPerSide + bufferCenter] -= sum;
+        std::cout << "rearranger ds=" << dSBuffer[bufferCenter * nGridPerSide + bufferCenter] << std::endl;
 
         double meanStrainDecrement = 1.0 / nGridPerSide / nGridPerSide;
         double factor[MaxDimension];
@@ -457,13 +477,14 @@ public:
         //should not reach here
         std::cerr << "gridModel::initializeFromDumpFile failed : found no frame with both softness and strain recorded.\n";
     }
-    void shear()
+    //increase the first component of the strain tensor by the desired amount
+    void shear(double strain = 1e-6)
     {
         int nSite = nGridPerSide * nGridPerSide;
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i].x[0] += 1e-6;
+            this->alle[i].x[0] += strain;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
@@ -609,11 +630,20 @@ int main()
 
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
+    double totalExternalStrain = 0.0;
     while (numAvalanche < 100000 && !fileExists("stop.txt"))
     {
-        //std::cout << "shearing\n";
-        model.shear();
-        //std::cout << "checking avalanche\n";
+        double strain = model.minimumXyStrainDistanceToRarranging() + 1e-10;
+        model.shear(strain);
+        totalExternalStrain += strain;
+
+        auto outputStrainFunc = [&]() -> void {
+            double sum = 0.0;
+            for (auto s : model.alle)
+                sum += s.x[0];
+            strainFile << totalExternalStrain << ' ' << sum / model.alle.size() << std::endl;
+        };
+        outputStrainFunc();
 
         std::stringstream ss;
         ss << "avalanche_" << numAvalanche;
@@ -630,11 +660,16 @@ int main()
             else
                 model.dump(false, false, false, true);
         }
+        else
+        {
+            //the shear strain should be enough to trigger at least one rearrangement
+            std::cerr << "Error in main : expected rearrangement did not occur\n";
+            exit(1);
+        }
+
         numAvalanche += avalanched;
 
-        double sum = 0.0;
-        for (auto s : model.alle)
-            sum += s.x[0];
-        strainFile << sum / model.alle.size() << std::endl;
+        outputStrainFunc();
+
     }
 }
