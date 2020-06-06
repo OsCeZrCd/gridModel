@@ -224,12 +224,8 @@ public:
                 dSBuffer[index] = dsFromRearranger(dx, dy, r);
             }
 
-        //require that dsBuffer sums to zero
-        double sum = 0.0;
-        for (auto ds : dSBuffer)
-            sum += ds;
-        dSBuffer[bufferCenter * nGridPerSide + bufferCenter] -= sum;
-        std::cout << "rearranger ds=" << dSBuffer[bufferCenter * nGridPerSide + bufferCenter] << std::endl;
+        //ds of the center is dealt separately
+        dSBuffer[bufferCenter * nGridPerSide + bufferCenter] =0.0;
 
         double meanStrainDecrement = 1.0 / nGridPerSide / nGridPerSide;
         double factor[MaxDimension];
@@ -569,6 +565,10 @@ public:
                                 hasRearranged[i] = 1;
                                 //alls[i] = sDistribution(rEngine);
                                 yieldStrainCoeff[i] = coeffDistribution(rEngine);
+
+                                //my simulation suggests this
+                                double dsCenter=std::min(-0.2-0.13*alls[i], 0.25);
+                                alls[i]+=dsCenter;
                             }
                         }
                     }
