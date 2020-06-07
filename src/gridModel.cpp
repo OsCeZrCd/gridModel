@@ -30,6 +30,8 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
+const double meanSoftness = -2.0;
+
 class gridModel
 {
 public:
@@ -69,7 +71,7 @@ public:
 
     gridModel(int nGrid, double lGrid) : rEngine(0),
                                          eDistribution(0.0, 0.01),
-                                         sDistribution(-2.0, 2.0),
+                                         sDistribution(meanSoftness, 2.0),
                                          coeffDistribution(1.5, 0.667),
                                          rearrangingIntensityDistribution(1.0, 0.01),
                                          rearrangeFrameLength(5),
@@ -173,16 +175,16 @@ public:
     bool startRearranging(GeometryVector e, double s, int i)
     {
         double yieldStrain = 0.07 - 0.01 * s;
-        yieldStrain=std::max(yieldStrain, 0.05);
-        yieldStrain=std::min(yieldStrain, 0.15);
+        yieldStrain = std::max(yieldStrain, 0.05);
+        //yieldStrain=std::min(yieldStrain, 0.15);
         yieldStrain *= yieldStrainCoeff[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
     double xyStrainDistanceToRarranging(GeometryVector e, double s, int i)
     {
         double yieldStrain = 0.07 - 0.01 * s;
-        yieldStrain=std::max(yieldStrain, 0.05);
-        yieldStrain=std::min(yieldStrain, 0.15);
+        yieldStrain = std::max(yieldStrain, 0.05);
+        //yieldStrain=std::min(yieldStrain, 0.15);
         yieldStrain *= yieldStrainCoeff[i];
         if (e.Modulus2() > yieldStrain * yieldStrain)
             return 0.0;
@@ -225,7 +227,7 @@ public:
             }
 
         //ds of the center is dealt separately
-        dSBuffer[bufferCenter * nGridPerSide + bufferCenter] =0.0;
+        dSBuffer[bufferCenter * nGridPerSide + bufferCenter] = 0.0;
 
         double meanStrainDecrement = 1.0 / nGridPerSide / nGridPerSide;
         double factor[MaxDimension];
@@ -545,7 +547,10 @@ public:
                                     GeometryVector &de = dEBuffer[j][xInBuffer * nGridPerSide + yInBuffer];
                                     e.AddFrom(rearrangingIntensity[i].x[j] * de);
                                 }
-                                alls[x * nGridPerSide + y] += dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
+                                double ds = dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
+                                //I have not studied this numerically yet, but I need to make softness go to its mean somehow
+                                double toCenterCorrection = std::abs(ds) * 0.1 * (meanSoftness - alls[x * nGridPerSide + y]);
+                                alls[x * nGridPerSide + y] += ds + toCenterCorrection;
                             }
                         }
                         numRearrange++;
@@ -567,8 +572,8 @@ public:
                                 yieldStrainCoeff[i] = coeffDistribution(rEngine);
 
                                 //my simulation suggests this
-                                double dsCenter=std::min(-0.2-0.13*alls[i], 0.25);
-                                alls[i]+=dsCenter;
+                                double dsCenter = std::min(-0.2 - 0.13 * alls[i], 0.25);
+                                alls[i] += dsCenter;
                             }
                         }
                     }
@@ -670,6 +675,5 @@ int main()
         numAvalanche += avalanched;
 
         outputStrainFunc();
-
     }
 }
