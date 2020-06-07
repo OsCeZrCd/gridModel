@@ -173,16 +173,16 @@ public:
     bool startRearranging(GeometryVector e, double s, int i)
     {
         double yieldStrain = 0.07 - 0.01 * s;
-        if (yieldStrain < 0.05)
-            yieldStrain = 0.05;
+        yieldStrain=std::max(yieldStrain, 0.05);
+        yieldStrain=std::min(yieldStrain, 0.15);
         yieldStrain *= yieldStrainCoeff[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
     double xyStrainDistanceToRarranging(GeometryVector e, double s, int i)
     {
         double yieldStrain = 0.07 - 0.01 * s;
-        if (yieldStrain < 0.05)
-            yieldStrain = 0.05;
+        yieldStrain=std::max(yieldStrain, 0.05);
+        yieldStrain=std::min(yieldStrain, 0.15);
         yieldStrain *= yieldStrainCoeff[i];
         if (e.Modulus2() > yieldStrain * yieldStrain)
             return 0.0;
