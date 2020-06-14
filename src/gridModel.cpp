@@ -31,6 +31,8 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 }
 
 const double meanSoftness = -2.0;
+const double stdSoftness = 2.0;
+const double softnessRestoringCoefficient = 0.002;
 
 class gridModel
 {
@@ -71,7 +73,7 @@ public:
 
     gridModel(int nGrid, double lGrid) : rEngine(0),
                                          eDistribution(0.0, 0.01),
-                                         sDistribution(meanSoftness, 2.0),
+                                         sDistribution(meanSoftness, stdSoftness),
                                          coeffDistribution(1.5, 0.667),
                                          rearrangingIntensityDistribution(1.0, 0.01),
                                          rearrangeFrameLength(5),
@@ -499,6 +501,12 @@ public:
 
 #pragma omp parallel
         {
+            std::normal_distribution<double> noiseDistribution(0.0, 1.0);
+            std::mt19937 threadEngine;
+#pragma omp critical(random)
+            {
+                threadEngine.seed(rEngine());
+            }
             int numRearrange = 1;
             while (numRearrange > 0)
             {
@@ -550,7 +558,18 @@ public:
                                 double ds = dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
                                 //I have not studied this numerically yet, but I need to make softness go to its mean somehow
                                 double toCenterCorrection = std::abs(ds) * 0.1 * (meanSoftness - alls[x * nGridPerSide + y]);
-                                alls[x * nGridPerSide + y] += ds + toCenterCorrection;
+
+                                //softness has a diffusion-in-harmonic-well term for r<4
+                                double harmonicDiffusion = 0.0;
+                                double dx = (xInBuffer - bufferCenter) * lGrid;
+                                double dy = (yInBuffer - bufferCenter) * lGrid;
+                                double r = std::sqrt(dx * dx + dy * dy);
+                                if(r<4.0)
+                                {
+                                    harmonicDiffusion=softnessRestoringCoefficient*(meanSoftness-alls[x * nGridPerSide + y])/stdSoftness/stdSoftness
+                                                    +sqrt(2.0*softnessRestoringCoefficient)*noiseDistribution(threadEngine);
+                                }
+                                alls[x * nGridPerSide + y] += ds + harmonicDiffusion;
                             }
                         }
                         numRearrange++;
@@ -659,7 +678,7 @@ int main()
             std::cout << numAvalanche << "avalanches so far.\n";
             if (numAvalanche % 100 == 0)
             {
-                if(numAvalanche%1000==0)
+                if (numAvalanche % 1000 == 0)
                     plot(model.hasRearranged, nGridPerSide, ss.str());
                 model.dump(true, true, true, true);
             }
