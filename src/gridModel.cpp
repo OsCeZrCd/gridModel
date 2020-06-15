@@ -32,7 +32,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 
 const double meanSoftness = -2.0;
 const double stdSoftness = 2.0;
-const double softnessRestoringCoefficient = 0.002;
+const double softnessRestoringCoefficient = 0.02;
 
 class gridModel
 {
