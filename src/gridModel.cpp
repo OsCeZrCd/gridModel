@@ -32,7 +32,6 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 
 const double meanSoftness = -2.0;
 const double stdSoftness = 2.0;
-const double softnessRestoringCoefficient = 0.02;
 
 class gridModel
 {
@@ -564,10 +563,11 @@ public:
                                 double dx = (xInBuffer - bufferCenter) * lGrid;
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
-                                if(r<4.0)
+                                const double alpha = 0.63, beta = 1.55;
+                                if (r > 0)
                                 {
-                                    harmonicDiffusion=softnessRestoringCoefficient*(meanSoftness-alls[x * nGridPerSide + y])/stdSoftness/stdSoftness
-                                                    +sqrt(2.0*softnessRestoringCoefficient)*noiseDistribution(threadEngine);
+                                    double softnessRestoringCoefficient = 0.5 * alpha * alpha * std::pow(r, -2 * beta);
+                                    harmonicDiffusion = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]) / stdSoftness / stdSoftness + sqrt(2.0 * softnessRestoringCoefficient) * noiseDistribution(threadEngine);
                                 }
                                 alls[x * nGridPerSide + y] += ds + harmonicDiffusion;
                             }
