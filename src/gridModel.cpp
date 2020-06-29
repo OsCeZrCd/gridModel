@@ -56,11 +56,8 @@ public:
     std::normal_distribution<double> sDistribution;
     //distribution of strain initially
     std::normal_distribution<double> eDistribution;
-    //distribution of how much of a block's original strain is redistributed in a rearrangement
-    //1.0 means all of its strain is redistributed
-    std::normal_distribution<double> rearrangingIntensityDistribution;
 
-    std::gamma_distribution<double> coeffDistribution;
+    std::weibull_distribution<double> coeffDistribution;
     std::vector<double> yieldStrainCoeff;
 
     netCDF::NcFile dumpFile;
@@ -73,8 +70,7 @@ public:
     gridModel(int nGrid, double lGrid) : rEngine(0),
                                          eDistribution(0.0, 0.01),
                                          sDistribution(meanSoftness, stdSoftness),
-                                         coeffDistribution(1.5, 0.667),
-                                         rearrangingIntensityDistribution(1.0, 0.01),
+                                         coeffDistribution(1.5, 1.1077),
                                          rearrangeFrameLength(5),
                                          nGridPerSide(nGrid), lGrid(lGrid)
     {
@@ -500,12 +496,6 @@ public:
 
 #pragma omp parallel
         {
-            std::normal_distribution<double> noiseDistribution(0.0, 1.0);
-            std::mt19937 threadEngine;
-#pragma omp critical(random)
-            {
-                threadEngine.seed(rEngine());
-            }
             int numRearrange = 1;
             while (numRearrange > 0)
             {
@@ -516,8 +506,8 @@ public:
                         {
                             rearrangingStep[i] = 1;
                             rearrangingIntensity[i] = alle[i] * (1.0 / rearrangeFrameLength);
-                            rearrangingIntensity[i].x[0] *= this->rearrangingIntensityDistribution(this->rEngine);
-                            rearrangingIntensity[i].x[1] *= this->rearrangingIntensityDistribution(this->rEngine);
+                            //rearrangingIntensity[i].x[0] *= this->rearrangingIntensityDistribution(this->rEngine);
+                            //rearrangingIntensity[i].x[1] *= this->rearrangingIntensityDistribution(this->rEngine);
                         }
                 }
 
@@ -555,21 +545,19 @@ public:
                                     e.AddFrom(rearrangingIntensity[i].x[j] * de);
                                 }
                                 double ds = dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
-                                //I have not studied this numerically yet, but I need to make softness go to its mean somehow
-                                double toCenterCorrection = std::abs(ds) * 0.1 * (meanSoftness - alls[x * nGridPerSide + y]);
 
-                                //softness has a diffusion-in-harmonic-well term for r<4
-                                double harmonicDiffusion = 0.0;
+                                //softness has a restoring force
+                                double restore = 0.0;
                                 double dx = (xInBuffer - bufferCenter) * lGrid;
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
-                                const double alpha = 0.63, beta = 1.55;
+                                const double alpha = 0.082, beta = -3.58;
                                 if (r > 0)
                                 {
-                                    double softnessRestoringCoefficient = 0.5 * alpha * alpha * std::pow(r, -2 * beta);
-                                    harmonicDiffusion = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]) / stdSoftness / stdSoftness + sqrt(2.0 * softnessRestoringCoefficient) * noiseDistribution(threadEngine);
+                                    double softnessRestoringCoefficient = alpha * std::pow(r, beta);
+                                    restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
                                 }
-                                alls[x * nGridPerSide + y] += ds + harmonicDiffusion;
+                                alls[x * nGridPerSide + y] += ds + restore;
                             }
                         }
                         numRearrange++;
