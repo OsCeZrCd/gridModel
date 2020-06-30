@@ -552,9 +552,14 @@ public:
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
                                 const double alpha = 0.082, beta = -3.58;
-                                if (r > 0)
+                                if (r > 0 && r<10)
                                 {
                                     double softnessRestoringCoefficient = alpha * std::pow(r, beta);
+                                    restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
+                                }
+                                else if (r<20)
+                                {
+                                    double softnessRestoringCoefficient = -1e-5;
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
                                 }
                                 alls[x * nGridPerSide + y] += ds + restore;
