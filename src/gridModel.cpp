@@ -71,7 +71,7 @@ public:
                                          eDistribution(0.0, 0.01),
                                          sDistribution(meanSoftness, stdSoftness),
                                          coeffDistribution(1.5, 1.1077),
-                                         rearrangeFrameLength(5),
+                                         rearrangeFrameLength(2),
                                          nGridPerSide(nGrid), lGrid(lGrid)
     {
         this->allocate();
@@ -551,7 +551,7 @@ public:
                                 double dx = (xInBuffer - bufferCenter) * lGrid;
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
-                                const double alpha = 0.082, beta = -3.58;
+                                const double alpha = 0.087, beta = -3.68;
                                 if (r > 0 && r<10)
                                 {
                                     double softnessRestoringCoefficient = alpha * std::pow(r, beta);
