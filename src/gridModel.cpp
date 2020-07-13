@@ -30,8 +30,10 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
-const double meanSoftness = -2.0;
-const double stdSoftness = 2.0;
+const double meanSoftness = -0.12;
+const double stdSoftness = 0.67;
+
+const double shearStepSize = 1e-5;
 
 class gridModel
 {
@@ -70,8 +72,8 @@ public:
     gridModel(int nGrid, double lGrid) : rEngine(0),
                                          eDistribution(0.0, 0.01),
                                          sDistribution(meanSoftness, stdSoftness),
-                                         coeffDistribution(1.5, 1.1077),
-                                         rearrangeFrameLength(2),
+                                         coeffDistribution(1.69, 1.1203),
+                                         rearrangeFrameLength(3e-3 / shearStepSize),
                                          nGridPerSide(nGrid), lGrid(lGrid)
     {
         this->allocate();
@@ -171,37 +173,14 @@ public:
     //if you want to change the yielding criteria, also change "xyStrainDistanceToRearranging"
     bool startRearranging(GeometryVector e, double s, int i)
     {
-        double yieldStrain = 0.07 - 0.01 * s;
-        yieldStrain = std::max(yieldStrain, 0.05);
-        //yieldStrain=std::min(yieldStrain, 0.15);
+        double yieldStrain = 0.005 - 0.00071 * std::min(1.5, s);
         yieldStrain *= yieldStrainCoeff[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
-    double xyStrainDistanceToRarranging(GeometryVector e, double s, int i)
-    {
-        double yieldStrain = 0.07 - 0.01 * s;
-        yieldStrain = std::max(yieldStrain, 0.05);
-        //yieldStrain=std::min(yieldStrain, 0.15);
-        yieldStrain *= yieldStrainCoeff[i];
-        if (e.Modulus2() > yieldStrain * yieldStrain)
-            return 0.0;
-        else
-            return std::sqrt(yieldStrain * yieldStrain - e.x[1] * e.x[1]) - e.x[0];
-    }
-    double minimumXyStrainDistanceToRarranging()
-    {
-        double minimum = std::numeric_limits<double>::max();
-        for (int i = 0; i < this->alle.size(); i++)
-            minimum = std::min(minimum, this->xyStrainDistanceToRarranging(this->alle[i], this->alls[i], i));
-        return minimum;
-    }
-
     double dsFromRearranger(double dx, double dy, double r)
     {
-        if (r < 4.0)
-            return -0.03;
-        else if (r < 30)
-            return 1.0 / r / r / r - 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
+        if (0 < r && r < 30)
+            return (5.122 + std::sin(2.0 * std::atan2(dy, dx))) * std::pow(r, -0.569);
         else
             return 0.0;
     }
@@ -481,11 +460,15 @@ public:
         {
             this->alle[i].x[0] += strain;
             this->hasRearranged[i] = 0;
-            this->rearrangingStep[i] = 0;
+
+            //here we pull instead of shear,
+            //which increases softness a lot
+            this->alls[i] += 2.0 * strain;
         }
     }
-    bool avalanche(std::string outputPrefix = "")
+    bool step(std::string outputPrefix = "")
     {
+        this->shear(shearStepSize);
         bool avalancheHappened = false;
         int nSite = nGridPerSide * nGridPerSide;
         int nStep = 0;
@@ -496,8 +479,6 @@ public:
 
 #pragma omp parallel
         {
-            int numRearrange = 1;
-            while (numRearrange > 0)
             {
 #pragma omp single
                 {
@@ -506,14 +487,12 @@ public:
                         {
                             rearrangingStep[i] = 1;
                             rearrangingIntensity[i] = alle[i] * (1.0 / rearrangeFrameLength);
-                            //rearrangingIntensity[i].x[0] *= this->rearrangingIntensityDistribution(this->rEngine);
-                            //rearrangingIntensity[i].x[1] *= this->rearrangingIntensityDistribution(this->rEngine);
                         }
                 }
 
 #pragma omp barrier
                 //rearrangement affect other sites parameters
-                numRearrange = 0;
+                int numRearrange = 0;
                 for (int i = 0; i < nSite; i++)
                 {
                     if (rearrangingStep[i] > 0)
@@ -551,18 +530,17 @@ public:
                                 double dx = (xInBuffer - bufferCenter) * lGrid;
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
-                                const double alpha = 0.087, beta = -3.68;
-                                if (r > 0 && r<10)
+                                if (r == 0)
                                 {
-                                    double softnessRestoringCoefficient = alpha * std::pow(r, beta);
+                                    double softnessRestoringCoefficient = 40.0;
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
                                 }
-                                else if (r<20)
+                                else if (r > 0 && r < 10)
                                 {
-                                    double softnessRestoringCoefficient = -1e-5;
+                                    double softnessRestoringCoefficient = 15.2 * std::pow(r, -1.21) + 3.33;
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
                                 }
-                                alls[x * nGridPerSide + y] += ds + restore;
+                                alls[x * nGridPerSide + y] += (ds + restore) * shearStepSize;
                             }
                         }
                         numRearrange++;
@@ -582,10 +560,6 @@ public:
                                 hasRearranged[i] = 1;
                                 //alls[i] = sDistribution(rEngine);
                                 yieldStrainCoeff[i] = coeffDistribution(rEngine);
-
-                                //my simulation suggests this
-                                double dsCenter = std::min(-0.2 - 0.13 * alls[i], 0.25);
-                                alls[i] += dsCenter;
                             }
                         }
                     }
@@ -645,14 +619,11 @@ int main()
         std::cout << "could not find netCDF dump file " << ncFileName << ", create a new one.\n";
     }
 
-    int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    while (numAvalanche < 100000 && !fileExists("stop.txt"))
+    for(int i=0; i<0.1/shearStepSize; i++)
     {
-        double strain = model.minimumXyStrainDistanceToRarranging() + 1e-10;
-        model.shear(strain);
-        totalExternalStrain += strain;
+        totalExternalStrain += shearStepSize;
 
         auto outputStrainFunc = [&]() -> void {
             double sum = 0.0;
@@ -660,33 +631,15 @@ int main()
                 sum += s.x[0];
             strainFile << totalExternalStrain << ' ' << sum / model.alle.size() << std::endl;
         };
-        outputStrainFunc();
 
         std::stringstream ss;
-        ss << "avalanche_" << numAvalanche;
+        ss << "step_" << i;
 
-        bool avalanched = model.avalanche("");
-        if (avalanched)
-        {
-            std::cout << numAvalanche << "avalanches so far.\n";
-            if (numAvalanche % 100 == 0)
-            {
-                if (numAvalanche % 1000 == 0)
-                    plot(model.hasRearranged, nGridPerSide, ss.str());
-                model.dump(true, true, true, true);
-            }
-            else
-                model.dump(false, false, false, true);
-        }
-        else
-        {
-            //the shear strain should be enough to trigger at least one rearrangement
-            std::cerr << "Error in main : expected rearrangement did not occur\n";
-            exit(1);
-        }
-
-        numAvalanche += avalanched;
-
+        model.step("");
+        plot(model.hasRearranged, nGridPerSide, ss.str());
+        model.dump(true, true, true, true);
         outputStrainFunc();
     }
+
+    return 0;
 }
