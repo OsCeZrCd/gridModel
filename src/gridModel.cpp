@@ -174,6 +174,7 @@ public:
     bool startRearranging(GeometryVector e, double s, int i)
     {
         double yieldStrain = 0.005 - 0.00071 * std::min(1.5, s);
+        yieldStrain *= 10;
         yieldStrain *= yieldStrainCoeff[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
@@ -497,6 +498,7 @@ public:
                 {
                     if (rearrangingStep[i] > 0)
                     {
+                        hasRearranged[i] = 1;
                         //update softness and strain
                         int rx = i / nGridPerSide;
                         int ry = i % nGridPerSide;
@@ -635,7 +637,7 @@ int main()
         std::stringstream ss;
         ss << "step_" << i;
 
-        std::cout<<"strain="<<i*shearStepSize<<", ";
+        std::cout << "strain=" << i * shearStepSize << ", ";
         model.step("");
         if (i % 100 == 0)
         {
