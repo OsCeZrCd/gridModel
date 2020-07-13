@@ -33,7 +33,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 const double meanSoftness = -0.12;
 const double stdSoftness = 0.67;
 
-const double shearStepSize = 1e-5;
+const double shearStepSize = 1e-6;
 
 class gridModel
 {
@@ -70,7 +70,7 @@ public:
     int rearrangeFrameLength;
 
     gridModel(int nGrid, double lGrid) : rEngine(0),
-                                         eDistribution(0.0, 0.01),
+                                         eDistribution(0.0, 1e-5),
                                          sDistribution(meanSoftness, stdSoftness),
                                          coeffDistribution(1.69, 1.1203),
                                          rearrangeFrameLength(3e-3 / shearStepSize),
