@@ -621,7 +621,7 @@ int main()
 
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    for(int i=0; i<0.1/shearStepSize; i++)
+    for (int i = 0; i < 0.1 / shearStepSize; i++)
     {
         totalExternalStrain += shearStepSize;
 
@@ -636,8 +636,13 @@ int main()
         ss << "step_" << i;
 
         model.step("");
-        plot(model.hasRearranged, nGridPerSide, ss.str());
-        model.dump(true, true, true, true);
+        if (i % 100 == 0)
+        {
+            plot(model.hasRearranged, nGridPerSide, ss.str());
+            model.dump(true, true, true, true);
+        }
+        else
+            model.dump(false, false, false, true);
         outputStrainFunc();
     }
 
