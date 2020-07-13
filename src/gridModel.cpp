@@ -33,7 +33,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 const double meanSoftness = -0.12;
 const double stdSoftness = 0.67;
 
-const double shearStepSize = 1e-6;
+const double shearStepSize = 1e-5;
 
 class gridModel
 {
@@ -70,7 +70,7 @@ public:
     int rearrangeFrameLength;
 
     gridModel(int nGrid, double lGrid) : rEngine(0),
-                                         eDistribution(0.0, 1e-5),
+                                         eDistribution(0.0, 1e-4),
                                          sDistribution(meanSoftness, stdSoftness),
                                          coeffDistribution(1.69, 1.1203),
                                          rearrangeFrameLength(3e-3 / shearStepSize),
@@ -567,7 +567,7 @@ public:
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-                        std::cout << "num rearranger in this frame=" << numRearrange;
+                        std::cout << "num rearranger=" << numRearrange;
                         double sum = 0.0;
                         for (auto &e : this->alle)
                             sum += e.Modulus2();
@@ -635,6 +635,7 @@ int main()
         std::stringstream ss;
         ss << "step_" << i;
 
+        std::cout<<"strain="<<i*shearStepSize<<", ";
         model.step("");
         if (i % 100 == 0)
         {
