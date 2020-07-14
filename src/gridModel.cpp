@@ -174,7 +174,7 @@ public:
     bool startRearranging(GeometryVector e, double s, int i)
     {
         double yieldStrain = 0.005 - 0.00071 * std::min(1.5, s);
-        yieldStrain *= 10;
+        //yieldStrain *= 10;
         yieldStrain *= yieldStrainCoeff[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
@@ -472,7 +472,6 @@ public:
         this->shear(shearStepSize);
         bool avalancheHappened = false;
         int nSite = nGridPerSide * nGridPerSide;
-        int nStep = 0;
 
         //if rearranging, the value is how much strain is redistributed per frame
         std::vector<GeometryVector> rearrangingIntensity;
@@ -498,7 +497,6 @@ public:
                 {
                     if (rearrangingStep[i] > 0)
                     {
-                        hasRearranged[i] = 1;
                         //update softness and strain
                         int rx = i / nGridPerSide;
                         int ry = i % nGridPerSide;
@@ -556,36 +554,31 @@ public:
                         {
                             //rearrangement has a fixed number of steps
                             rearrangingStep[i]++;
+                            hasRearranged[i] = 1;
                             if (rearrangingStep[i] > this->rearrangeFrameLength)
                             {
                                 rearrangingStep[i] = 0;
-                                hasRearranged[i] = 1;
-                                //alls[i] = sDistribution(rEngine);
                                 yieldStrainCoeff[i] = coeffDistribution(rEngine);
                             }
                         }
                     }
 
+                    std::cout << outputPrefix;
+                    std::cout << ", num rearranger=" << numRearrange;
+
+                    double sum = 0.0;
+                    for (auto &s : this->alls)
+                        sum += s;
+                    std::cout << ", mean s=" << sum / alls.size();
+                    std::cout << std::endl;
+
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-                        std::cout << "num rearranger=" << numRearrange;
-                        double sum = 0.0;
-                        for (auto &e : this->alle)
-                            sum += e.Modulus2();
-                        std::cout << ", mean energy=" << sum / alle.size();
-
-                        sum = 0.0;
-                        for (auto &s : this->alls)
-                            sum += s;
-                        std::cout << ", mean s=" << sum / alls.size();
-                        std::cout << std::endl;
 
                         if (outputPrefix != std::string(""))
                         {
-                            std::stringstream ss;
-                            ss << outputPrefix << "_step_" << (nStep++);
-                            plot(this->rearrangingStep, nGridPerSide, ss.str());
+                            plot(this->hasRearranged, nGridPerSide, outputPrefix);
                         }
                     }
                 }
@@ -623,7 +616,7 @@ int main()
 
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    for (int i = 0; i < 0.05 / shearStepSize && ! fileExists("stop.txt"); i++)
+    for (int i = 0; i < 0.05 / shearStepSize && !fileExists("stop.txt"); i++)
     {
         totalExternalStrain += shearStepSize;
 
@@ -635,13 +628,13 @@ int main()
         };
 
         std::stringstream ss;
-        ss << "step_" << i;
+        if (i % 100 == 0)
+            ss << "step_" << i;
 
-        std::cout << "strain=" << i * shearStepSize << ", ";
-        model.step("");
+        model.step(ss.str());
         if (i % 100 == 0)
         {
-            plot(model.hasRearranged, nGridPerSide, ss.str());
+            //plot(model.hasRearranged, nGridPerSide, ss.str());
             model.dump(true, true, true, true);
         }
         else
