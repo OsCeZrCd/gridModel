@@ -623,7 +623,7 @@ int main()
 
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    for (int i = 0; i < 0.1 / shearStepSize; i++)
+    for (int i = 0; i < 0.05 / shearStepSize && ! fileExists("stop.txt"); i++)
     {
         totalExternalStrain += shearStepSize;
 
