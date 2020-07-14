@@ -73,7 +73,7 @@ public:
                                          eDistribution(0.0, 1e-4),
                                          sDistribution(meanSoftness, stdSoftness),
                                          coeffDistribution(1.69, 1.1203),
-                                         rearrangeFrameLength(3e-3 / shearStepSize),
+                                         rearrangeFrameLength(1),
                                          nGridPerSide(nGrid), lGrid(lGrid)
     {
         this->allocate();
@@ -540,7 +540,7 @@ public:
                                     double softnessRestoringCoefficient = 15.2 * std::pow(r, -1.21) + 3.33;
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
                                 }
-                                alls[x * nGridPerSide + y] += (ds + restore) * shearStepSize;
+                                alls[x * nGridPerSide + y] += (ds + restore) * 3e-3;
                             }
                         }
                         numRearrange++;
@@ -627,12 +627,13 @@ int main()
             strainFile << totalExternalStrain << ' ' << sum / model.alle.size() << std::endl;
         };
 
+        bool detailedOutput = (i % 1 == 0);
         std::stringstream ss;
-        if (i % 100 == 0)
+        if (detailedOutput)
             ss << "step_" << i;
 
         model.step(ss.str());
-        if (i % 100 == 0)
+        if (detailedOutput)
         {
             //plot(model.hasRearranged, nGridPerSide, ss.str());
             model.dump(true, true, true, true);
