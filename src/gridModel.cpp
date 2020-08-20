@@ -168,21 +168,23 @@ public:
         }
     }
 
-    //if you want to change the yielding criteria, also change "xyStrainDistanceToRearranging"
-    bool startRearranging(GeometryVector e, double s, int i)
+    double deviatoricYieldStrain(int i)
     {
-        double yieldStrain = 0.07 - 0.01 * s;
+        double yieldStrain = 0.07 - 0.01 * alls[i];
         yieldStrain = std::max(yieldStrain, 0.05);
-        //yieldStrain=std::min(yieldStrain, 0.15);
         yieldStrain *= yieldStrainCoeff[i];
+        return yieldStrain;
+    }
+    bool startRearranging(int i)
+    {
+        double yieldStrain = deviatoricYieldStrain(i);
+        auto e=alle[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
-    double xyStrainDistanceToRarranging(GeometryVector e, double s, int i)
+    double xyStrainDistanceToRarranging(int i)
     {
-        double yieldStrain = 0.07 - 0.01 * s;
-        yieldStrain = std::max(yieldStrain, 0.05);
-        //yieldStrain=std::min(yieldStrain, 0.15);
-        yieldStrain *= yieldStrainCoeff[i];
+        double yieldStrain = deviatoricYieldStrain(i);
+        auto e=alle[i];
         if (e.Modulus2() > yieldStrain * yieldStrain)
             return 0.0;
         else
@@ -192,7 +194,7 @@ public:
     {
         double minimum = std::numeric_limits<double>::max();
         for (int i = 0; i < this->alle.size(); i++)
-            minimum = std::min(minimum, this->xyStrainDistanceToRarranging(this->alle[i], this->alls[i], i));
+            minimum = std::min(minimum, this->xyStrainDistanceToRarranging(i));
         return minimum;
     }
 
@@ -502,7 +504,7 @@ public:
 #pragma omp single
                 {
                     for (int i = 0; i < nSite; i++)
-                        if (rearrangingStep[i] == 0 && startRearranging(alle[i], alls[i], i))
+                        if (rearrangingStep[i] == 0 && startRearranging(i))
                         {
                             rearrangingStep[i] = 1;
                             rearrangingIntensity[i] = alle[i] * (1.0 / rearrangeFrameLength);
