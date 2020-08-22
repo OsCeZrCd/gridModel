@@ -677,7 +677,7 @@ int main()
             std::cout << numAvalanche << "avalanches so far.\n";
             if (numAvalanche % 100 == 0)
             {
-                if (numAvalanche % 1000 == 0)
+                if (numAvalanche % 10000 == 0)
                     plot(model.hasRearranged, nGridPerSide, ss.str());
                 model.dump(true, true, true, true);
             }
