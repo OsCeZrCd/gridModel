@@ -599,17 +599,7 @@ public:
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-                        std::cout << "num rearranger in this frame=" << numRearrange;
-                        double sum = 0.0;
-                        for (auto &e : this->alle)
-                            sum += e.Modulus2();
-                        std::cout << ", mean energy=" << sum / alle.size();
-
-                        sum = 0.0;
-                        for (auto &s : this->alls)
-                            sum += s;
-                        std::cout << ", mean s=" << sum / alls.size();
-                        std::cout << std::endl;
+                        std::cout << "num rearranger in this frame=" << numRearrange <<std::endl;
 
                         if (outputPrefix != std::string(""))
                         {
