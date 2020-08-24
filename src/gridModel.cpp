@@ -601,11 +601,6 @@ public:
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-
-                        if (outputPrefix != std::string(""))
-                        {
-                            plot(this->hasRearranged, nGridPerSide, outputPrefix);
-                        }
                     }
                 }
             }
@@ -653,12 +648,12 @@ int main()
             strainFile << totalExternalStrain << ' ' << sum / model.alle.size() << std::endl;
         };
 
-        bool detailedOutput = (i % 100 == 0);
         std::stringstream ss;
-        if (detailedOutput)
-            ss << "step_" << i;
+        ss << "step_" << i;
 
         model.step(ss.str());
+
+        bool detailedOutput = (i % 100 == 0);
         if (detailedOutput)
         {
             //plot(model.hasRearranged, nGridPerSide, ss.str());
