@@ -59,8 +59,8 @@ public:
     //distribution of strain initially
     std::normal_distribution<double> eDistribution;
 
-    std::weibull_distribution<double> coeffDistribution;
-    std::vector<double> yieldStrainCoeff;
+    std::uniform_real_distribution<double> PxDistribution;
+    std::vector<double> yieldStrainPx;
 
     netCDF::NcFile dumpFile;
     netCDF::NcVar eVar, sVar, hasRearrangedVar;
@@ -72,7 +72,6 @@ public:
     gridModel(int nGrid, double lGrid) : rEngine(0),
                                          eDistribution(0.0, 1e-4),
                                          sDistribution(meanSoftness, stdSoftness),
-                                         coeffDistribution(1.69, 1.1203),
                                          rearrangeFrameLength(1),
                                          nGridPerSide(nGrid), lGrid(lGrid)
     {
@@ -103,7 +102,7 @@ public:
         eVar = dumpFile.addVar("strain", netCDF::ncDouble, strainDims);
         sVar = dumpFile.addVar("softness", netCDF::ncDouble, dims);
         hasRearrangedVar = dumpFile.addVar("hasRearranged", netCDF::ncByte, dims);
-        coeffVar = dumpFile.addVar("yieldStrainCoeff", netCDF::ncDouble, dims);
+        coeffVar = dumpFile.addVar("yieldStrainPx", netCDF::ncDouble, dims);
         eVar.setCompression(true, true, 9);
         sVar.setCompression(true, true, 9);
         hasRearrangedVar.setCompression(true, true, 9);
@@ -115,7 +114,7 @@ public:
         eVar = dumpFile.getVar("strain");
         sVar = dumpFile.getVar("softness");
         hasRearrangedVar = dumpFile.getVar("hasRearranged");
-        coeffVar = dumpFile.getVar("yieldStrainCoeff");
+        coeffVar = dumpFile.getVar("yieldStrainPx");
     }
     void dump(bool writeStrain = false, bool writeSoftness = false, bool writeYieldStrainCoeff = false, bool writeHasRearranged = true)
     {
@@ -155,7 +154,7 @@ public:
             countp.push_back(1);
             for (int i = 0; i < dim; i++)
                 countp.push_back(nGridPerSide);
-            coeffVar.putVar(startp, countp, yieldStrainCoeff.data());
+            coeffVar.putVar(startp, countp, yieldStrainPx.data());
         }
         if (writeHasRearranged)
         {
@@ -170,14 +169,41 @@ public:
         }
     }
 
-    //if you want to change the yielding criteria, also change "xyStrainDistanceToRearranging"
-    bool startRearranging(GeometryVector e, double s, int i)
+    double deviatoricYieldStrain(int i)
     {
-        double yieldStrain = 0.005 - 0.00071 * std::min(1.5, s);
-        //yieldStrain *= 10;
-        yieldStrain *= yieldStrainCoeff[i];
+        double s=alls[i];
+        double meanYieldStrain = 0.005 - 0.00071 * std::min(1.5, s);
+        meanYieldStrain = std::max(meanYieldStrain, 0.05);
+        //weibull distribution
+        double k= 1.7;
+        double lambda = meanYieldStrain/std::tgamma(1.0+1.0/k);
+
+        double yieldStrain = std::pow(-1.0*std::log(1.0-yieldStrainPx[i]), 1.0/k)*lambda;
+        return yieldStrain;
+    }
+    bool startRearranging(int i)
+    {
+        double yieldStrain = deviatoricYieldStrain(i);
+        auto e=alle[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
+    double xyStrainDistanceToRarranging(int i)
+    {
+        double yieldStrain = deviatoricYieldStrain(i);
+        auto e=alle[i];
+        if (e.Modulus2() > yieldStrain * yieldStrain)
+            return 0.0;
+        else
+            return std::sqrt(yieldStrain * yieldStrain - e.x[1] * e.x[1]) - e.x[0];
+    }
+    double minimumXyStrainDistanceToRarranging()
+    {
+        double minimum = std::numeric_limits<double>::max();
+        for (int i = 0; i < this->alle.size(); i++)
+            minimum = std::min(minimum, this->xyStrainDistanceToRarranging(i));
+        return minimum;
+    }
+
     double dsFromRearranger(double dx, double dy, double r)
     {
         if (0 < r && r < 30)
@@ -371,7 +397,7 @@ public:
         int nSite = nGridPerSide * nGridPerSide;
         alle.resize(nSite);
         alls.resize(nSite);
-        yieldStrainCoeff.resize(nSite);
+        yieldStrainPx.resize(nSite);
         hasRearranged.resize(nSite);
         rearrangingStep.resize(nSite);
     }
@@ -383,7 +409,7 @@ public:
             this->alle[i].x[0] = this->eDistribution(this->rEngine);
             this->alle[i].x[1] = this->eDistribution(this->rEngine);
             this->alls[i] = this->sDistribution(this->rEngine);
-            this->yieldStrainCoeff[i] = this->coeffDistribution(this->rEngine);
+            this->yieldStrainPx[i] = this->PxDistribution(this->rEngine);
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
@@ -395,7 +421,7 @@ public:
         netCDF::NcFile inputFile(filename, netCDF::NcFile::read);
         netCDF::NcVar readEVar = inputFile.getVar("strain");
         netCDF::NcVar readSVar = inputFile.getVar("softness");
-        netCDF::NcVar readCVar = inputFile.getVar("yieldStrainCoeff");
+        netCDF::NcVar readCVar = inputFile.getVar("yieldStrainPx");
 
         int framesAlreadyWritten = readEVar.getDim(0).getSize();
         for (int framesToRead = framesAlreadyWritten - 1; framesToRead >= 0; framesToRead--)
@@ -430,7 +456,7 @@ public:
                 countp.push_back(1);
                 for (int i = 0; i < dim; i++)
                     countp.push_back(nGridPerSide);
-                readCVar.getVar(startp, countp, yieldStrainCoeff.data());
+                readCVar.getVar(startp, countp, yieldStrainPx.data());
             }
 
             //netCDF use a fillValue to indicate non-written value
@@ -439,10 +465,10 @@ public:
             //otherwise, frame data is invalid, see if an earlier frame is valid by letting the loop continue;
             double &fillEValue = alle[0].x[0];
             double &fillSValue = alls[0];
-            double &fillCValue = yieldStrainCoeff[0];
+            double &fillCValue = yieldStrainPx[0];
             for (int i = 1; i < nGridPerSide * nGridPerSide; i++)
             {
-                if (alle[i].x[0] != fillEValue && alle[i].x[1] != fillEValue && alls[i] != fillSValue && yieldStrainCoeff[i] != fillCValue)
+                if (alle[i].x[0] != fillEValue && alle[i].x[1] != fillEValue && alls[i] != fillSValue && yieldStrainPx[i] != fillCValue)
                 {
                     std::cout << "initialized from dump file: " << filename << ", at frame " << framesToRead << std::endl;
                     return;
@@ -483,7 +509,7 @@ public:
 #pragma omp single
                 {
                     for (int i = 0; i < nSite; i++)
-                        if (rearrangingStep[i] == 0 && startRearranging(alle[i], alls[i], i))
+                        if (rearrangingStep[i] == 0 && startRearranging(i))
                         {
                             rearrangingStep[i] = 1;
                             rearrangingIntensity[i] = alle[i] * (1.0 / rearrangeFrameLength);
@@ -558,7 +584,7 @@ public:
                             if (rearrangingStep[i] > this->rearrangeFrameLength)
                             {
                                 rearrangingStep[i] = 0;
-                                yieldStrainCoeff[i] = coeffDistribution(rEngine);
+                                yieldStrainPx[i] = PxDistribution(rEngine);
                             }
                         }
                     }
