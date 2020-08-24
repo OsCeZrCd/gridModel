@@ -653,7 +653,7 @@ int main()
             strainFile << totalExternalStrain << ' ' << sum / model.alle.size() << std::endl;
         };
 
-        bool detailedOutput = (i % 1 == 0);
+        bool detailedOutput = (i % 100 == 0);
         std::stringstream ss;
         if (detailedOutput)
             ss << "step_" << i;
