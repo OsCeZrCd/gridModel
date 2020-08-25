@@ -172,11 +172,9 @@ public:
     double deviatoricYieldStrain(int i)
     {
         double s=alls[i];
-        double meanYieldStrain = 0.005 - 0.00071 * std::min(1.5, s);
-        meanYieldStrain = std::max(meanYieldStrain, 0.05);
         //weibull distribution
-        double k= 1.7;
-        double lambda = meanYieldStrain/std::tgamma(1.0+1.0/k);
+        double k= 2.8;
+        double lambda = 0.036-0.006*s;
 
         double yieldStrain = std::pow(-1.0*std::log(1.0-yieldStrainPx[i]), 1.0/k)*lambda;
         return yieldStrain;
@@ -637,7 +635,7 @@ int main()
 
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    for (int i = 0; i < 0.05 / shearStepSize && !fileExists("stop.txt"); i++)
+    for (int i = 0; i < 0.10 / shearStepSize && !fileExists("stop.txt"); i++)
     {
         totalExternalStrain += shearStepSize;
 
