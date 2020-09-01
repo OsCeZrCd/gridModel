@@ -173,10 +173,10 @@ public:
     {
         double s=alls[i];
         //weibull distribution
-        double k= 2.8;
-        double lambda = 0.036-0.006*s;
+        double k= 1.68;
+        double lambda = 0.0778*std::exp(-0.7238*s)+0.04253;
 
-        double yieldStrain = std::pow(-1.0*std::log(1.0-yieldStrainPx[i]), 1.0/k)*lambda;
+        double yieldStrain = 0.001+std::pow(-1.0*std::log(1.0-yieldStrainPx[i]), 1.0/k)*lambda;
         return yieldStrain;
     }
     bool startRearranging(int i)
