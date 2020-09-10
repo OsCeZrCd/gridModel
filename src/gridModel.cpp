@@ -628,7 +628,7 @@ int main()
 
     const std::string ncFileName = "dump.nc";
 
-    const int nGridPerSide = 300;
+    const int nGridPerSide = 316;
     gridModel model(nGridPerSide, 1.0);
     if (fileExists(ncFileName))
     {
@@ -644,7 +644,7 @@ int main()
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    while (numAvalanche < 100000 && !fileExists("stop.txt"))
+    while (totalExternalStrain<0.1)
     {
         double strain = model.minimumXyStrainDistanceToRarranging() + 1e-10;
         model.shear(strain);
