@@ -170,16 +170,16 @@ public:
     double deviatoricYieldStrain(int i)
     {
         double s=alls[i];
-        double meanYieldStrain = 0.16889-0.0048341*s;
-        meanYieldStrain = std::max(meanYieldStrain, 0.0);
+        double meanYieldStrain = 0.087261 - 0.0049821 * s;
         //weibull distribution
-        double k= 2.0702 - 0.093048 * s + 0.0093543 *s*s; 
+        double k= 2.0758 - 0.024151 * s + 0.0029429 *s*s; 
         double lambda = meanYieldStrain/std::tgamma(1.0+1.0/k);
 
         double yieldStrain = std::pow(-1.0*std::log(1.0-yieldStrainPx[i]), 1.0/k)*lambda;
         return yieldStrain;
     }
-    bool startRearranging(int i)
+ 
+   bool startRearranging(int i)
     {
         double yieldStrain = deviatoricYieldStrain(i);
         auto e=alle[i];
