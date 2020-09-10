@@ -67,7 +67,7 @@ public:
     //length of a rearrangement in frames
     int rearrangeFrameLength;
 
-    gridModel(int nGrid, double lGrid) : rEngine(0),
+    gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                          eDistribution(0.0, 0.01),
                                          sDistribution(meanSoftness, stdSoftness),
                                          rearrangeFrameLength(2),
@@ -629,7 +629,9 @@ int main()
     const std::string ncFileName = "dump.nc";
 
     const int nGridPerSide = 316;
-    gridModel model(nGridPerSide, 1.0);
+    int seed;
+    std::cin >> seed;
+    gridModel model(nGridPerSide, 1.0, seed);
     if (fileExists(ncFileName))
     {
         model.initializeFromDumpFile(ncFileName);
