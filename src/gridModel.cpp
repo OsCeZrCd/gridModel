@@ -56,6 +56,8 @@ public:
     std::normal_distribution<double> sDistribution;
     //distribution of strain initially
     std::normal_distribution<double> eDistribution;
+    //distribution of elastic strain after rearrangement
+    std::normal_distribution<double> residualStrainDistribution;
 
     std::uniform_real_distribution<double> PxDistribution;
     std::vector<double> yieldStrainPx;
@@ -69,6 +71,7 @@ public:
 
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                          eDistribution(0.0, 0.01),
+                                         residualStrainDistribution(0.0, 0.001),
                                          sDistribution(meanSoftness, stdSoftness),
                                          rearrangeFrameLength(2),
                                          nGridPerSide(nGrid), lGrid(lGrid)
@@ -512,8 +515,8 @@ public:
                         {
                             rearrangingStep[i] = 1;
                             rearrangingIntensity[i] = alle[i] * (1.0 / rearrangeFrameLength);
-                            //rearrangingIntensity[i].x[0] *= this->rearrangingIntensityDistribution(this->rEngine);
-                            //rearrangingIntensity[i].x[1] *= this->rearrangingIntensityDistribution(this->rEngine);
+                            rearrangingIntensity[i].x[0] += this->residualStrainDistribution(this->rEngine);
+                            rearrangingIntensity[i].x[1] += this->residualStrainDistribution(this->rEngine);
                         }
                 }
 
