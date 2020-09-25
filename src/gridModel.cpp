@@ -17,8 +17,18 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     {
         for (int j = 0; j < nGridPerSide; j++)
         {
-            x.SetVal(mreal(data[i * nGridPerSide + j]), i, j);
-            //std::cout<<data[i*nGridPerSide+j]<<" ";
+            mreal a = 0.0;
+            if (data[i * nGridPerSide + j] > 0)
+                a = 1.0;
+            else if (i + 1 != nGridPerSide && data[(i + 1) * nGridPerSide + j] > 0)
+                a = std::max(0.5, a);
+            else if (i - 1 != -1 && data[(i - 1) * nGridPerSide + j] > 0)
+                a = std::max(0.5, a);
+            else if (j + 1 != nGridPerSide && data[i * nGridPerSide + j + 1] > 0)
+                a = std::max(0.5, a);
+            else if (j - 1 != -1 && data[i * nGridPerSide + j - 1] > 0)
+                a = std::max(0.5, a);
+            x.SetVal(a, i, j);
         }
         //std::cout<<std::endl;
     }
@@ -26,7 +36,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.SetSize(1600, 1600);
     //gr.Aspect(0.75, 1.0);
     //gr.Colorbar(">kbcyr");
-    gr.Tile(x, "bkr");
+    gr.Tile(x, "bckyr");
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
@@ -70,11 +80,11 @@ public:
     int rearrangeFrameLength;
 
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
-                                         eDistribution(0.0, 0.01),
-                                         residualStrainDistribution(0.0, 0.001),
-                                         sDistribution(meanSoftness, stdSoftness),
-                                         rearrangeFrameLength(2),
-                                         nGridPerSide(nGrid), lGrid(lGrid)
+                                                   eDistribution(0.0, 0.01),
+                                                   residualStrainDistribution(0.0, 0.02),
+                                                   sDistribution(meanSoftness, stdSoftness),
+                                                   rearrangeFrameLength(2),
+                                                   nGridPerSide(nGrid), lGrid(lGrid)
     {
         this->allocate();
         this->getBuffer();
@@ -172,26 +182,26 @@ public:
 
     double deviatoricYieldStrain(int i)
     {
-        double s=alls[i];
+        double s = alls[i];
         double meanYieldStrain = 0.087261 - 0.0049821 * s;
         //weibull distribution
-        double k= 2.0758 - 0.024151 * s + 0.0029429 *s*s; 
-        double lambda = meanYieldStrain/std::tgamma(1.0+1.0/k);
+        double k = 2.0758 - 0.024151 * s + 0.0029429 * s * s;
+        double lambda = meanYieldStrain / std::tgamma(1.0 + 1.0 / k);
 
-        double yieldStrain = std::pow(-1.0*std::log(1.0-yieldStrainPx[i]), 1.0/k)*lambda;
+        double yieldStrain = std::pow(-1.0 * std::log(1.0 - yieldStrainPx[i]), 1.0 / k) * lambda;
         return yieldStrain;
     }
- 
-   bool startRearranging(int i)
+
+    bool startRearranging(int i)
     {
         double yieldStrain = deviatoricYieldStrain(i);
-        auto e=alle[i];
+        auto e = alle[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
     double xyStrainDistanceToRarranging(int i)
     {
         double yieldStrain = deviatoricYieldStrain(i);
-        auto e=alle[i];
+        auto e = alle[i];
         if (e.Modulus2() > yieldStrain * yieldStrain)
             return 0.0;
         else
@@ -561,12 +571,12 @@ public:
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
                                 const double alpha = 0.087, beta = -3.68;
-                                if (r > 0 && r<10)
+                                if (r > 0 && r < 10)
                                 {
                                     double softnessRestoringCoefficient = alpha * std::pow(r, beta);
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
                                 }
-                                else if (r<20)
+                                else if (r < 20)
                                 {
                                     double softnessRestoringCoefficient = -1e-5;
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
@@ -602,7 +612,7 @@ public:
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-                        std::cout << "num rearranger in this frame=" << numRearrange <<std::endl;
+                        std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
 
                         if (outputPrefix != std::string(""))
                         {
@@ -649,7 +659,7 @@ int main()
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    while (totalExternalStrain<0.1)
+    while (totalExternalStrain < 0.15)
     {
         double strain = model.minimumXyStrainDistanceToRarranging() + 1e-10;
         model.shear(strain);
@@ -666,7 +676,12 @@ int main()
         std::stringstream ss;
         ss << "avalanche_" << numAvalanche;
 
-        bool avalanched = model.avalanche("");
+        bool avalanched;
+        if (numAvalanche != 2560)
+            avalanched = model.avalanche("");
+        else
+            avalanched = model.avalanche("2560");
+
         if (avalanched)
         {
             std::cout << numAvalanche << "avalanches so far.\n";
