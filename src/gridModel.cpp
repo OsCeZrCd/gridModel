@@ -81,7 +81,7 @@ public:
 
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                                    eDistribution(0.0, 0.01),
-                                                   residualStrainDistribution(0.0, 0.02),
+                                                   residualStrainDistribution(0.0, 0.03),
                                                    sDistribution(meanSoftness, stdSoftness),
                                                    rearrangeFrameLength(2),
                                                    nGridPerSide(nGrid), lGrid(lGrid)
@@ -524,9 +524,8 @@ public:
                         if (rearrangingStep[i] == 0 && startRearranging(i))
                         {
                             rearrangingStep[i] = 1;
-                            rearrangingIntensity[i] = alle[i] * (1.0 / rearrangeFrameLength);
-                            rearrangingIntensity[i].x[0] += this->residualStrainDistribution(this->rEngine);
-                            rearrangingIntensity[i].x[1] += this->residualStrainDistribution(this->rEngine);
+                            GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
+                            rearrangingIntensity[i] = (alle[i]-residual) * (1.0 / rearrangeFrameLength);
                         }
                 }
 
