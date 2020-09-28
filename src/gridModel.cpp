@@ -40,7 +40,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
-const double meanSoftness = -2.0;
+const double meanSoftness = -1.882;
 const double stdSoftness = 2.0;
 
 class gridModel
