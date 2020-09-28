@@ -515,6 +515,12 @@ public:
 
 #pragma omp parallel
         {
+            std::normal_distribution<double> noiseDistribution(0.0, 1.0);
+            std::mt19937 threadEngine;
+            #pragma omp critical(random)
+            {
+                threadEngine.seed(rEngine());
+            }
             int numRearrange = 1;
             while (numRearrange > 0)
             {
@@ -580,7 +586,10 @@ public:
                                     double softnessRestoringCoefficient = -1e-5;
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
                                 }
-                                alls[x * nGridPerSide + y] += ds + restore;
+                                double harmonicDiffusion=0.0;
+                                if(r<20)
+                                    harmonicDiffusion=noiseDistribution(threadEngine)*0.63*std::pow(r, -1.55);
+                                alls[x * nGridPerSide + y] += ds + restore + harmonicDiffusion;
                             }
                         }
                         numRearrange++;
