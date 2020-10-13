@@ -81,7 +81,7 @@ public:
 
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                                    eDistribution(0.0, 0.01),
-                                                   residualStrainDistribution(0.0, 0.03),
+                                                   residualStrainDistribution(0.0, 0.04),
                                                    sDistribution(meanSoftness, stdSoftness),
                                                    rearrangeFrameLength(2),
                                                    nGridPerSide(nGrid), lGrid(lGrid)
