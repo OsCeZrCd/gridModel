@@ -587,7 +587,7 @@ public:
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
                                 }
                                 double harmonicDiffusion=0.0;
-                                if(r<20)
+                                if(r>0 && r<20)
                                     harmonicDiffusion=noiseDistribution(threadEngine)*0.63*std::pow(r, -1.55);
                                 alls[x * nGridPerSide + y] += ds + restore + harmonicDiffusion;
                             }
@@ -685,10 +685,7 @@ int main()
         ss << "avalanche_" << numAvalanche;
 
         bool avalanched;
-        if (numAvalanche != 2560)
-            avalanched = model.avalanche("");
-        else
-            avalanched = model.avalanche("2560");
+        avalanched = model.avalanche("");
 
         if (avalanched)
         {
