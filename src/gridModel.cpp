@@ -183,7 +183,7 @@ public:
     double deviatoricYieldStrain(int i)
     {
         double s = alls[i];
-        double meanYieldStrain = std::max(0.087261 - 0.0049821 * s, 0.01);
+        double meanYieldStrain = 0.087261 - 0.0049821 * s;
         //weibull distribution
         double k = 2.0758 - 0.024151 * s + 0.0029429 * s * s;
         double lambda = meanYieldStrain / std::tgamma(1.0 + 1.0 / k);
@@ -215,14 +215,36 @@ public:
         return minimum;
     }
 
-    double dsFromRearranger(double dx, double dy, double r)
+    double dsFromRearranger(double dx, double dy, double r, double s, std::mt19937 &engine)
     {
-        if (r<4.0)
-            return -0.03;
-        if (r < 30)
-            return 1.0 / r / r / r - 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
+        double meanContribution = 0.0;
+        if (r < 4.0)
+            meanContribution = -0.03;
+        else if (r < 30)
+            meanContribution = 1.0 / r / r / r - 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
         else
-            return 0.0;
+            meanContribution = 0.0;
+
+        const double alpha = 0.087, beta = -3.68;
+        double restore = 0.0;
+        if (r > 0 && r < 10)
+        {
+            double softnessRestoringCoefficient = alpha * std::pow(r, beta);
+            restore = softnessRestoringCoefficient * (meanSoftness - s);
+        }
+        else if (r < 20)
+        {
+            double softnessRestoringCoefficient = -1e-5;
+            restore = softnessRestoringCoefficient * (meanSoftness - s);
+        }
+        double harmonicDiffusion = 0.0;
+        if (r > 0 && r < 20)
+        {
+            std::normal_distribution<double> noiseDistribution(0.0, 0.63 * std::pow(r, -1.55));
+            harmonicDiffusion = noiseDistribution(engine);
+        }
+
+        return meanContribution + restore + harmonicDiffusion;
     }
     void getBuffer()
     {
@@ -501,9 +523,8 @@ public:
 
 #pragma omp parallel
         {
-            std::normal_distribution<double> noiseDistribution(0.0, 1.0);
             std::mt19937 threadEngine;
-            #pragma omp critical(random)
+#pragma omp critical(random)
             {
                 threadEngine.seed(rEngine());
             }
@@ -517,7 +538,7 @@ public:
                         {
                             rearrangingStep[i] = 1;
                             GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
-                            rearrangingIntensity[i] = (alle[i]-residual) * (1.0 / rearrangeFrameLength);
+                            rearrangingIntensity[i] = (alle[i] - residual) * (1.0 / rearrangeFrameLength);
                         }
                 }
 
@@ -556,26 +577,11 @@ public:
                                 }
 
                                 //softness has a restoring force
-                                double restore = 0.0;
                                 double dx = (xInBuffer - bufferCenter) * lGrid;
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
-                                double ds = dsFromRearranger(dx, dy, r);
-                                const double alpha = 0.087, beta = -3.68;
-                                if (r > 0 && r < 10)
-                                {
-                                    double softnessRestoringCoefficient = alpha * std::pow(r, beta);
-                                    restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
-                                }
-                                else if (r < 20)
-                                {
-                                    double softnessRestoringCoefficient = -1e-5;
-                                    restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
-                                }
-                                double harmonicDiffusion=0.0;
-                                if(r>0 && r<20)
-                                    harmonicDiffusion=noiseDistribution(threadEngine)*0.63*std::pow(r, -1.55);
-                                alls[x * nGridPerSide + y] += ds + restore + harmonicDiffusion;
+                                double ds = dsFromRearranger(dx, dy, r, alls[x * nGridPerSide + y], threadEngine);
+                                alls[x * nGridPerSide + y] += ds;
                             }
                         }
                         numRearrange++;
