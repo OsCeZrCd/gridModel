@@ -50,7 +50,7 @@ public:
     double lGrid;
     int bufferCenter;
 
-    std::vector<double> dSBuffer, alls;
+    std::vector<double> alls;
 
     //e is elastic strain
     //dEBuffer[0] and [1] correspond to
@@ -183,7 +183,7 @@ public:
     double deviatoricYieldStrain(int i)
     {
         double s = alls[i];
-        double meanYieldStrain = 0.087261 - 0.0049821 * s;
+        double meanYieldStrain = std::max(0.087261 - 0.0049821 * s, 0.01);
         //weibull distribution
         double k = 2.0758 - 0.024151 * s + 0.0029429 * s * s;
         double lambda = meanYieldStrain / std::tgamma(1.0 + 1.0 / k);
@@ -217,9 +217,9 @@ public:
 
     double dsFromRearranger(double dx, double dy, double r)
     {
-        if (r < 4.0)
+        if (r<4.0)
             return -0.03;
-        else if (r < 30)
+        if (r < 30)
             return 1.0 / r / r / r - 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
         else
             return 0.0;
@@ -230,20 +230,6 @@ public:
 
         for (int i = 0; i < MaxDimension; i++)
             dEBuffer[i].resize(nGridPerSide * nGridPerSide);
-
-        dSBuffer.resize(nGridPerSide * nGridPerSide);
-        for (int i = 0; i < nGridPerSide; i++)
-            for (int j = 0; j < nGridPerSide; j++)
-            {
-                double dx = (i - bufferCenter) * lGrid;
-                double dy = (j - bufferCenter) * lGrid;
-                double r = std::sqrt(dx * dx + dy * dy);
-                int index = i * nGridPerSide + j;
-                dSBuffer[index] = dsFromRearranger(dx, dy, r);
-            }
-
-        //ds of the center is dealt separately
-        dSBuffer[bufferCenter * nGridPerSide + bufferCenter] = 0.0;
 
         double meanStrainDecrement = 1.0 / nGridPerSide / nGridPerSide;
         double factor[MaxDimension];
@@ -568,13 +554,13 @@ public:
                                     GeometryVector &de = dEBuffer[j][xInBuffer * nGridPerSide + yInBuffer];
                                     e.AddFrom(rearrangingIntensity[i].x[j] * de);
                                 }
-                                double ds = dSBuffer[xInBuffer * nGridPerSide + yInBuffer];
 
                                 //softness has a restoring force
                                 double restore = 0.0;
                                 double dx = (xInBuffer - bufferCenter) * lGrid;
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
+                                double ds = dsFromRearranger(dx, dy, r);
                                 const double alpha = 0.087, beta = -3.68;
                                 if (r > 0 && r < 10)
                                 {
