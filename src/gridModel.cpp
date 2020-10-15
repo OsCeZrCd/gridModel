@@ -43,7 +43,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 const double meanSoftness = -1.882;
 const double stdSoftness = 2.0;
 
-double numericalDsR[] =
+std::vector<double> numericalDsR =
     {
         0.90483741803596,
         1.10517091807565,
@@ -66,7 +66,7 @@ double numericalDsR[] =
         33.1154519586923,
 };
 
-double numericalDs[] =
+std::vector<double> numericalDs =
     {
         0.115407163314733,
         -0.157866369001493,
@@ -264,13 +264,26 @@ public:
     double dsFromRearranger(double dx, double dy, double r, double s, std::mt19937 &engine)
     {
         if (r == 0.0)
-            return 0.0;// delta S of the rearranger is processed separately
+            return 0.0; // delta S of the rearranger is processed separately
 
         double meanContribution = 0.0;
-        if (r < 4.0)
-            meanContribution = -0.03;
-        else if (r < 30)
-            meanContribution = 1.0 / r / r / r - 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
+        if (r < 30)
+        {
+            //interpolate numericalDs
+            auto iter = std::lower_bound(numericalDsR.begin(), numericalDsR.end(), r);
+            if (iter == numericalDsR.begin() || iter == numericalDsR.end())
+            {
+                std::cerr << "Error in interpolation! check the range of arrays\n";
+                return 0.0;
+            }
+            iter--;
+            int index = iter - numericalDsR.begin();
+            double fraction = (r - *iter) / (*(iter + 1) - *iter);
+            meanContribution = numericalDs[index] + fraction * (numericalDs[index + 1] - numericalDs[index]);
+
+            //contribution from volumetric strain
+            meanContribution -= 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
+        }
         else
             meanContribution = 0.0;
 
@@ -286,6 +299,7 @@ public:
             double softnessRestoringCoefficient = -1e-5;
             restore = softnessRestoringCoefficient * (meanSoftness - s);
         }
+
         double harmonicDiffusion = 0.0;
         if (r > 0 && r < 20)
         {
