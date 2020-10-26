@@ -122,14 +122,13 @@ public:
     netCDF::NcVar eVar, sVar, hasRearrangedVar;
     netCDF::NcVar coeffVar;
 
-    //length of a rearrangement in frames
-    int rearrangeFrameLength;
+    //In this version of the program, length of a rearrangement in frames is determined from the intensity
+    //int rearrangeFrameLength;
 
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                                    eDistribution(0.0, 0.01),
                                                    residualStrainDistribution(0.0, 0.04),
                                                    sDistribution(meanSoftness, stdSoftness),
-                                                   rearrangeFrameLength(2),
                                                    nGridPerSide(nGrid), lGrid(lGrid)
     {
         this->allocate();
@@ -583,6 +582,7 @@ public:
         //if rearranging, the value is how much strain is redistributed per frame
         std::vector<GeometryVector> rearrangingIntensity;
         rearrangingIntensity.resize(nSite);
+        std::vector<int> rearrangeFrameLength(nSite, 0);
 
 #pragma omp parallel
         {
@@ -601,7 +601,9 @@ public:
                         {
                             rearrangingStep[i] = 1;
                             GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
-                            rearrangingIntensity[i] = (alle[i] - residual) * (1.0 / rearrangeFrameLength);
+                            GeometryVector totalIntensity = (alle[i] - residual);
+                            rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2())) / 0.03), 1);
+                            rearrangingIntensity[i] = totalIntensity * (1.0 / rearrangeFrameLength[i]);
                         }
                 }
 
@@ -658,8 +660,9 @@ public:
                         {
                             //rearrangement has a fixed number of steps
                             rearrangingStep[i]++;
-                            if (rearrangingStep[i] > this->rearrangeFrameLength)
+                            if (rearrangingStep[i] > rearrangeFrameLength[i])
                             {
+                                rearrangeFrameLength[i] = 0;
                                 rearrangingStep[i] = 0;
                                 hasRearranged[i] = 1;
                                 //alls[i] = sDistribution(rEngine);
