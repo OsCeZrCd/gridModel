@@ -228,6 +228,7 @@ public:
     double deviatoricYieldStrain(int i)
     {
         double s = alls[i];
+
         double meanYieldStrain = 0.087261 - 0.0049821 * s;
         //weibull distribution
         double k = 2.0758 - 0.024151 * s + 0.0029429 * s * s;
@@ -602,7 +603,7 @@ public:
                             rearrangingStep[i] = 1;
                             GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
                             GeometryVector totalIntensity = (alle[i] - residual);
-                            rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2())) / 0.03), 1);
+                            rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2())) / 0.1), 1);
                             rearrangingIntensity[i] = totalIntensity * (1.0 / rearrangeFrameLength[i]);
                         }
                 }
@@ -725,7 +726,7 @@ int main()
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    while (totalExternalStrain < 0.15)
+    while (totalExternalStrain < 0.1)
     {
         double strain = model.minimumXyStrainDistanceToRarranging() + 1e-10;
         model.shear(strain);
