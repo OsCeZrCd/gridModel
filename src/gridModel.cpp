@@ -261,7 +261,7 @@ public:
         return minimum;
     }
 
-    double dsFromRearranger(double dx, double dy, double r, double s, std::mt19937 &engine)
+    double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector & rearrangingIntensity, std::mt19937 &engine)
     {
         if (r == 0.0)
             return 0.0; // delta S of the rearranger is processed separately
@@ -282,7 +282,8 @@ public:
             meanContribution = numericalDs[index] + fraction * (numericalDs[index + 1] - numericalDs[index]);
 
             //contribution from volumetric strain
-            meanContribution -= 0.16 / r / r * std::sin(2.0 * std::atan2(dy, dx));
+            meanContribution -= 1.6*rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
+            meanContribution -= 1.6*rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
         }
         else
             meanContribution = 0.0;
@@ -646,7 +647,7 @@ public:
                                 double dx = (xInBuffer - bufferCenter) * lGrid;
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
-                                double ds = dsFromRearranger(dx, dy, r, alls[x * nGridPerSide + y], threadEngine);
+                                double ds = dsFromRearranger(dx, dy, r, alls[x * nGridPerSide + y], rearrangingIntensity[i], threadEngine);
                                 alls[x * nGridPerSide + y] += ds;
                             }
                         }
