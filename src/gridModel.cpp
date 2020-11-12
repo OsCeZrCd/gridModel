@@ -113,7 +113,8 @@ public:
     //distribution of strain initially
     std::normal_distribution<double> eDistribution;
     //distribution of elastic strain after rearrangement
-    std::normal_distribution<double> residualStrainDistribution;
+    //std::normal_distribution<double> residualStrainDistribution;
+    std::uniform_real_distribution<double> residualStrainDistribution;
 
     std::uniform_real_distribution<double> PxDistribution;
     std::vector<double> yieldStrainPx;
@@ -127,7 +128,7 @@ public:
 
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                                    eDistribution(0.0, 0.01),
-                                                   residualStrainDistribution(0.0, 0.04),
+                                                   residualStrainDistribution(0.0, 0.5),
                                                    sDistribution(meanSoftness, stdSoftness),
                                                    nGridPerSide(nGrid), lGrid(lGrid)
     {
@@ -602,7 +603,7 @@ public:
                         if (rearrangingStep[i] == 0 && startRearranging(i))
                         {
                             rearrangingStep[i] = 1;
-                            GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
+                            GeometryVector residual(this->residualStrainDistribution(this->rEngine)*alle[i].x[0], this->residualStrainDistribution(this->rEngine)*alle[i].x[1]);
                             GeometryVector totalIntensity = (alle[i] - residual);
                             rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2())) / 0.1), 1);
                             rearrangingIntensity[i] = totalIntensity * (1.0 / rearrangeFrameLength[i]);
