@@ -8,6 +8,7 @@
 #include "kiss_fftnd.h"
 #include "mgl2/mgl.h"
 #include <netcdf>
+#include <boost/math/special_functions/erf.hpp>
 
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
@@ -40,54 +41,8 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
-const double meanSoftness = -1.882;
-const double stdSoftness = 2.0;
-
-std::vector<double> numericalDsR =
-    {
-        0.90483741803596,
-        1.10517091807565,
-        1.349858807576,
-        1.64872127070013,
-        2.01375270747048,
-        2.45960311115695,
-        3.00416602394643,
-        3.66929666761924,
-        4.48168907033806,
-        5.4739473917272,
-        6.68589444227927,
-        8.16616991256765,
-        9.97418245481472,
-        12.1824939607035,
-        14.8797317248728,
-        18.1741453694431,
-        22.1979512814416,
-        27.1126389206579,
-        33.1154519586923,
-};
-
-std::vector<double> numericalDs =
-    {
-        0.115407163314733,
-        -0.157866369001493,
-        -0.122794150458982,
-        -0.0111312471488491,
-        -0.0123567435148076,
-        -0.0195800437378993,
-        -0.00140091760436869,
-        -0.00346197619971859,
-        0.000793079578640183,
-        0.00106809091953078,
-        0.00112736258290034,
-        0.00110702362832669,
-        0.000915153303260757,
-        0.000483591475874019,
-        0.000312333963820199,
-        0.000132837059034092,
-        4.22819533290796e-05,
-        8.57444728501887e-06,
-        1.17583919795709e-05,
-};
+const double meanSoftness = -1.75;
+const double stdSoftness = 1.12;
 
 class gridModel
 {
@@ -128,7 +83,7 @@ public:
 
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                                    eDistribution(0.0, 0.01),
-                                                   residualStrainDistribution(0.0, 0.5),
+                                                   residualStrainDistribution(-0.0, 0.0),
                                                    sDistribution(meanSoftness, stdSoftness),
                                                    nGridPerSide(nGrid), lGrid(lGrid)
     {
@@ -230,12 +185,12 @@ public:
     {
         double s = alls[i];
 
-        double meanYieldStrain = 0.087261 - 0.0049821 * s;
-        //weibull distribution
-        double k = 2.0758 - 0.024151 * s + 0.0029429 * s * s;
-        double lambda = meanYieldStrain / std::tgamma(1.0 + 1.0 / k);
+        double mu = 14.03 - 0.552 * s;
+        double sigma = 3.03;
 
-        double yieldStrain = std::pow(-1.0 * std::log(1.0 - yieldStrainPx[i]), 1.0 / k) * lambda;
+        double yieldStress = mu + std::sqrt(2.0) * sigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1);
+        const double modulus = 82.9; //measured by dividing mean yield stress for -2<S<-1 with mean yield strain
+        double yieldStrain = yieldStress / modulus;
         return yieldStrain;
     }
 
@@ -262,7 +217,7 @@ public:
         return minimum;
     }
 
-    double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector & rearrangingIntensity, std::mt19937 &engine)
+    double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
         if (r == 0.0)
             return 0.0; // delta S of the rearranger is processed separately
@@ -270,44 +225,25 @@ public:
         double meanContribution = 0.0;
         if (r < 30)
         {
-            //interpolate numericalDs
-            auto iter = std::lower_bound(numericalDsR.begin(), numericalDsR.end(), r);
-            if (iter == numericalDsR.begin() || iter == numericalDsR.end())
-            {
-                std::cerr << "Error in interpolation! check the range of arrays\n";
-                return 0.0;
-            }
-            iter--;
-            int index = iter - numericalDsR.begin();
-            double fraction = (r - *iter) / (*(iter + 1) - *iter);
-            meanContribution = numericalDs[index] + fraction * (numericalDs[index + 1] - numericalDs[index]);
-
-            //contribution from volumetric strain
-            meanContribution -= 1.6*rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
-            meanContribution -= 1.6*rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
+            double theta = std::atan2(dy, dx);
+            meanContribution = (0.311 * std::cos(4 * theta) - 0.128 * std::sin(2 * theta)) / r / r;
         }
         else
             meanContribution = 0.0;
 
-        const double alpha = 0.087, beta = -3.68;
         double restore = 0.0;
         if (r > 0 && r < 10)
         {
-            double softnessRestoringCoefficient = alpha * std::pow(r, beta);
-            restore = softnessRestoringCoefficient * (meanSoftness - s);
-        }
-        else if (r < 20)
-        {
-            double softnessRestoringCoefficient = -1e-5;
+            double softnessRestoringCoefficient = 0.1 * std::pow(r, -2.0);
             restore = softnessRestoringCoefficient * (meanSoftness - s);
         }
 
         double harmonicDiffusion = 0.0;
-        if (r > 0 && r < 20)
-        {
-            std::normal_distribution<double> noiseDistribution(0.0, 0.63 * std::pow(r, -1.55));
-            harmonicDiffusion = noiseDistribution(engine);
-        }
+        // if (r > 0 && r < 20)
+        // {
+        //     std::normal_distribution<double> noiseDistribution(0.0, 0.63 * std::pow(r, -1.55));
+        //     harmonicDiffusion = noiseDistribution(engine);
+        // }
 
         return meanContribution + restore + harmonicDiffusion;
     }
@@ -603,7 +539,7 @@ public:
                         if (rearrangingStep[i] == 0 && startRearranging(i))
                         {
                             rearrangingStep[i] = 1;
-                            GeometryVector residual(this->residualStrainDistribution(this->rEngine)*alle[i].x[0], this->residualStrainDistribution(this->rEngine)*alle[i].x[1]);
+                            GeometryVector residual(this->residualStrainDistribution(this->rEngine) * alle[i].x[0], this->residualStrainDistribution(this->rEngine) * alle[i].x[1]);
                             GeometryVector totalIntensity = (alle[i] - residual);
                             rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2())) / 0.1), 1);
                             rearrangingIntensity[i] = totalIntensity * (1.0 / rearrangeFrameLength[i]);
