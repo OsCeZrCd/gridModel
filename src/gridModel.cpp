@@ -41,8 +41,8 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
-const double meanSoftness = -1.75;
-const double stdSoftness = 1.12;
+const double meanSoftness = 12.8;
+const double stdSoftness = 5.0;
 
 class gridModel
 {
@@ -185,11 +185,11 @@ public:
     {
         double s = alls[i];
 
-        double mu = 14.03 - 0.552 * s;
-        double sigma = 3.03;
+        double mu = s;
+        double sigma = 3.0;
 
         double yieldStress = mu + std::sqrt(2.0) * sigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1);
-        const double modulus = 82.9; //measured by dividing mean yield stress for -2<S<-1 with mean yield strain
+        const double modulus = 89; //measured by dividing mean yield stress with mean yield strain
         double yieldStrain = yieldStress / modulus;
         return yieldStrain;
     }
@@ -225,16 +225,17 @@ public:
         double meanContribution = 0.0;
         if (r < 30)
         {
+            meanContribution += 0.20424*std::pow(r, -2.5187);
             double theta = std::atan2(dy, dx);
-            meanContribution = (0.311 * std::cos(4 * theta) - 0.128 * std::sin(2 * theta)) / r / r;
+            meanContribution += (-0.9845 * std::cos(4 * theta) + 1.1506 * std::sin(2 * theta)) / r / r;
         }
         else
             meanContribution = 0.0;
 
         double restore = 0.0;
-        if (r > 0 && r < 10)
+        if (r > 0 && r < 2.99)
         {
-            double softnessRestoringCoefficient = 0.1 * std::pow(r, -2.0);
+            double softnessRestoringCoefficient = 0.01;
             restore = softnessRestoringCoefficient * (meanSoftness - s);
         }
 
