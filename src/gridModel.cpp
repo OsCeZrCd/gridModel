@@ -42,7 +42,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 }
 
 const double meanSoftness = 12.8;
-const double stdSoftness = 5.0;
+const double stdSoftness = 3.0;
 
 class gridModel
 {
@@ -82,7 +82,7 @@ public:
     //int rearrangeFrameLength;
 
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
-                                                   eDistribution(0.0, 0.01),
+                                                   eDistribution(0.0, 0.001),
                                                    residualStrainDistribution(-0.0, 0.0),
                                                    sDistribution(meanSoftness, stdSoftness),
                                                    nGridPerSide(nGrid), lGrid(lGrid)
@@ -188,7 +188,9 @@ public:
         double mu = s;
         double sigma = 3.0;
 
-        double yieldStress = mu + std::sqrt(2.0) * sigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1);
+        double yieldStress = mu /*+ std::sqrt(2.0) * sigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1)*/;
+        if(yieldStress<1.0)
+            yieldStress=1.0;
         const double modulus = 89; //measured by dividing mean yield stress with mean yield strain
         double yieldStrain = yieldStress / modulus;
         return yieldStrain;
@@ -233,9 +235,9 @@ public:
             meanContribution = 0.0;
 
         double restore = 0.0;
-        if (r > 0 && r < 2.99)
+        if (r > 0 && r < 30)
         {
-            double softnessRestoringCoefficient = 0.01;
+            double softnessRestoringCoefficient = 5e-2/r/r;
             restore = softnessRestoringCoefficient * (meanSoftness - s);
         }
 
@@ -605,12 +607,8 @@ public:
                                 rearrangeFrameLength[i] = 0;
                                 rearrangingStep[i] = 0;
                                 hasRearranged[i] = 1;
-                                //alls[i] = sDistribution(rEngine);
+                                alls[i] = sDistribution(rEngine);
                                 yieldStrainPx[i] = PxDistribution(rEngine);
-
-                                //my simulation suggests this
-                                double dsCenter = std::min(-0.2 - 0.13 * alls[i], 0.25);
-                                alls[i] += dsCenter;
                             }
                         }
                     }
@@ -647,7 +645,7 @@ int main()
 
     const std::string ncFileName = "dump.nc";
 
-    const int nGridPerSide = 316;
+    const int nGridPerSide = 100;
     int seed;
     std::cin >> seed;
     gridModel model(nGridPerSide, 1.0, seed);
