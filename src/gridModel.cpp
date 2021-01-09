@@ -41,8 +41,8 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
-const double meanSoftness = 12.8;
-const double stdSoftness = 3.0;
+const double meanSoftness = 15.3;
+const double stdSoftness = 3.17;
 
 class gridModel
 {
@@ -225,19 +225,17 @@ public:
             return 0.0; // delta S of the rearranger is processed separately
 
         double meanContribution = 0.0;
-        if (r < 30)
         {
-            meanContribution += 0.20424*std::pow(r, -2.5187);
+            meanContribution += std::sqrt(rearrangingIntensity.Modulus2())*2.0424*std::pow(r, -2.5187);
             double theta = std::atan2(dy, dx);
-            meanContribution += (-0.9845 * std::cos(4 * theta) + 1.1506 * std::sin(2 * theta)) / r / r;
+            meanContribution += rearrangingIntensity.x[0]*(-9.845 * std::cos(4 * theta) + 11.506 * std::sin(2 * theta)) / r / r;
+            meanContribution += rearrangingIntensity.x[1]*(9.845 * std::cos(4 * theta) + 11.506 * std::cos(2 * theta)) / r / r;
         }
-        else
-            meanContribution = 0.0;
 
         double restore = 0.0;
-        if (r > 0 && r < 30)
+        if (r > 0 && r < 2.99)
         {
-            double softnessRestoringCoefficient = 5e-2/r/r;
+            double softnessRestoringCoefficient = 1e-2;
             restore = softnessRestoringCoefficient * (meanSoftness - s);
         }
 
@@ -544,7 +542,7 @@ public:
                             rearrangingStep[i] = 1;
                             GeometryVector residual(this->residualStrainDistribution(this->rEngine) * alle[i].x[0], this->residualStrainDistribution(this->rEngine) * alle[i].x[1]);
                             GeometryVector totalIntensity = (alle[i] - residual);
-                            rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2())) / 0.1), 1);
+                            rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2()) / 0.1)), 1);
                             rearrangingIntensity[i] = totalIntensity * (1.0 / rearrangeFrameLength[i]);
                         }
                 }
@@ -663,7 +661,7 @@ int main()
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    while (totalExternalStrain < 0.1)
+    while (totalExternalStrain < 0.15)
     {
         double strain = model.minimumXyStrainDistanceToRarranging() + 1e-10;
         model.shear(strain);
@@ -686,14 +684,7 @@ int main()
         if (avalanched)
         {
             std::cout << numAvalanche << "avalanches so far.\n";
-            if (numAvalanche % 100 == 0)
-            {
-                if (numAvalanche % 10000 == 0)
-                    plot(model.hasRearranged, nGridPerSide, ss.str());
-                model.dump(true, true, true, true);
-            }
-            else
-                model.dump(false, false, false, true);
+            model.dump(true, true, true, true);
         }
         else
         {
