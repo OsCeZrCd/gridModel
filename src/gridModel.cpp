@@ -10,6 +10,8 @@
 #include <netcdf>
 #include <boost/math/special_functions/erf.hpp>
 
+const double modulus = 89; //measured by dividing mean yield stress with mean yield strain
+
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 {
@@ -191,7 +193,6 @@ public:
         double yieldStress = mu /*+ std::sqrt(2.0) * sigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1)*/;
         if(yieldStress<1.0)
             yieldStress=1.0;
-        const double modulus = 89; //measured by dividing mean yield stress with mean yield strain
         double yieldStrain = yieldStress / modulus;
         return yieldStrain;
     }
@@ -221,6 +222,7 @@ public:
 
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
+        const double angularContributionCoefficient=5.37/2.0;
         if (r == 0.0)
             return 0.0; // delta S of the rearranger is processed separately
 
@@ -228,8 +230,8 @@ public:
         {
             meanContribution += std::sqrt(rearrangingIntensity.Modulus2())*2.0424*std::pow(r, -2.5187);
             double theta = std::atan2(dy, dx);
-            meanContribution += rearrangingIntensity.x[0]*(-9.845 * std::cos(4 * theta) + 11.506 * std::sin(2 * theta)) / r / r;
-            meanContribution += rearrangingIntensity.x[1]*(9.845 * std::cos(4 * theta) + 11.506 * std::cos(2 * theta)) / r / r;
+            meanContribution += angularContributionCoefficient*rearrangingIntensity.x[0]*(-9.845 * std::cos(4 * theta) + 11.506 * std::sin(2 * theta)) / r / r;
+            meanContribution += angularContributionCoefficient*rearrangingIntensity.x[1]*(9.845 * std::cos(4 * theta) + 11.506 * std::cos(2 * theta)) / r / r;
         }
 
         double restore = 0.0;
