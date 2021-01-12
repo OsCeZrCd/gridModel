@@ -711,8 +711,8 @@ int main()
     const std::string ncFileName = "dump.nc";
 
     const int nGridPerSide = 316;
-    int seed;
-    std::cin >> seed;
+    int seed, dumpLevel;
+    std::cin >> seed >> dumpLevel;
     gridModel model(nGridPerSide, 1.0, seed);
     if (fileExists(ncFileName))
     {
@@ -751,14 +751,15 @@ int main()
         if (avalanched)
         {
             std::cout << numAvalanche << "avalanches so far.\n";
-            if (numAvalanche % 100 == 0)
-            {
-                if (numAvalanche % 10000 == 0)
-                    plot(model.hasRearranged, nGridPerSide, ss.str());
+            if(dumpLevel>=10)
                 model.dump(true, true, true, true);
+            else if(dumpLevel>=5)
+            {
+                if(numAvalanche%100==0)
+                    model.dump(true, true, true, true);
+                else
+                    model.dump(false, false, false, true);
             }
-            else
-                model.dump(false, false, false, true);
         }
         else
         {
