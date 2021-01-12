@@ -263,6 +263,7 @@ public:
 
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector & rearrangingIntensity, std::mt19937 &engine)
     {
+        const double angularContributionCoefficient=10.0;
         if (r == 0.0)
             return 0.0; // delta S of the rearranger is processed separately
 
@@ -282,8 +283,8 @@ public:
             meanContribution = numericalDs[index] + fraction * (numericalDs[index + 1] - numericalDs[index]);
 
             //contribution from volumetric strain
-            meanContribution -= 1.6*rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
-            meanContribution -= 1.6*rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
+            meanContribution -= angularContributionCoefficient* 1.6*rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
+            meanContribution -= angularContributionCoefficient* 1.6*rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
         }
         else
             meanContribution = 0.0;
