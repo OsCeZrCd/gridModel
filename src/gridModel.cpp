@@ -605,7 +605,7 @@ public:
                             rearrangingStep[i] = 1;
                             GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
                             GeometryVector totalIntensity = (alle[i] - residual);
-                            rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2())) / 0.1), 1);
+                            rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2()) / 0.1)), 1);
                             rearrangingIntensity[i] = totalIntensity * (1.0 / rearrangeFrameLength[i]);
                         }
                 }
