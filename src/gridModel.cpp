@@ -707,18 +707,20 @@ public:
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-                        std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
+                        //std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
 
                         if (outputPrefix != std::string(""))
                         {
                             std::stringstream ss;
-                            ss << outputPrefix << "_step_" << (nStep++);
+                            ss << outputPrefix << "_step_" << nStep;
                             plot(this->rearrangingStep, nGridPerSide, ss.str());
                         }
+                        nStep++;
                     }
                 }
             }
         }
+        std::cout<<"steps in this avalanche="<<nStep<<std::endl;
         return avalancheHappened;
     }
 };
