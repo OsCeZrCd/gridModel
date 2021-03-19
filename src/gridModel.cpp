@@ -261,9 +261,9 @@ public:
         return minimum;
     }
 
-    double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector & rearrangingIntensity, std::mt19937 &engine)
+    double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
-        const double angularContributionCoefficient=10.0;
+        const double angularContributionCoefficient = 10.0;
         if (r == 0.0)
             return 0.0; // delta S of the rearranger is processed separately
 
@@ -283,8 +283,8 @@ public:
             meanContribution = numericalDs[index] + fraction * (numericalDs[index + 1] - numericalDs[index]);
 
             //contribution from volumetric strain
-            meanContribution -= angularContributionCoefficient* 1.6*rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
-            meanContribution -= angularContributionCoefficient* 1.6*rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
+            meanContribution -= angularContributionCoefficient * 1.6 * rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
+            meanContribution -= angularContributionCoefficient * 1.6 * rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
         }
         else
             meanContribution = 0.0;
@@ -576,6 +576,14 @@ public:
             this->rearrangingStep[i] = 0;
         }
     }
+
+    double rearrangingIncentive(int i)
+    {
+        double yieldStrain = deviatoricYieldStrain(i);
+        auto e = alle[i];
+        return e.Modulus2() - yieldStrain * yieldStrain;
+    }
+
     bool avalanche(std::string outputPrefix = "")
     {
         bool avalancheHappened = false;
@@ -599,15 +607,33 @@ public:
             {
 #pragma omp single
                 {
+                    //if a site is rearranging, do nothing
+                    //otherwise, find out the site with the largest incentive, let it rearrange
+                    int toRearrange = -1;
+                    double maxIncentive = 0.0;
                     for (int i = 0; i < nSite; i++)
-                        if (rearrangingStep[i] == 0 && startRearranging(i))
+                        if (rearrangingStep[i] > 0)
                         {
-                            rearrangingStep[i] = 1;
-                            GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
-                            GeometryVector totalIntensity = (alle[i] - residual);
-                            rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2()) / 0.1)), 1);
-                            rearrangingIntensity[i] = totalIntensity * (1.0 / rearrangeFrameLength[i]);
+                            toRearrange = -1;
+                            break;
                         }
+                        else
+                        {
+                            double incentive = rearrangingIncentive(i);
+                            if (incentive > maxIncentive)
+                            {
+                                maxIncentive = incentive;
+                                toRearrange = i;
+                            }
+                        }
+                    if (toRearrange >= 0)
+                    {
+                        rearrangingStep[toRearrange] = 1;
+                        GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
+                        GeometryVector totalIntensity = (alle[toRearrange] - residual);
+                        rearrangeFrameLength[toRearrange] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2()) / 0.1)), 1);
+                        rearrangingIntensity[toRearrange] = totalIntensity * (1.0 / rearrangeFrameLength[toRearrange]);
+                    }
                 }
 
 #pragma omp barrier
@@ -751,11 +777,11 @@ int main()
         if (avalanched)
         {
             std::cout << numAvalanche << "avalanches so far.\n";
-            if(dumpLevel>=10)
+            if (dumpLevel >= 10)
                 model.dump(true, true, true, true);
-            else if(dumpLevel>=5)
+            else if (dumpLevel >= 5)
             {
-                if(numAvalanche%100==0)
+                if (numAvalanche % 100 == 0)
                     model.dump(true, true, true, true);
                 else
                     model.dump(false, false, false, true);
