@@ -267,6 +267,7 @@ public:
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
         const double angularContributionCoefficient = 10.0;
+        const double emaMeanShift=-5.0;
         if (r == 0.0)
             return 0.0; // delta S of the rearranger is processed separately
 
@@ -293,20 +294,22 @@ public:
         else
             meanContribution = 0.0;
 
-        const double alpha = 0.087, beta = -3.68;
+        const double alpha = 0.06, beta = -3.1;
+        double softnessRestoringCoefficient = alpha * std::pow(r, beta);
+
         double restore = 0.0;
         if (r > 0 && r < 10)
         {
-            double softnessRestoringCoefficient = alpha * std::pow(r, beta);
             int index=std::floor(r);
-            restore = softnessRestoringCoefficient * (movingAverageTarget[index] - s);
+            restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
             movingAverageTarget[index]=0.99*movingAverageTarget[index]+0.01*s;
         }
 
         double harmonicDiffusion = 0.0;
         if (r > 0 && r < 20)
         {
-            std::normal_distribution<double> noiseDistribution(0.0, 0.63 * std::pow(r, -1.55));
+            double stddev = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient));
+            std::normal_distribution<double> noiseDistribution(0.0, stddev);
             harmonicDiffusion = noiseDistribution(engine);
         }
 
@@ -575,6 +578,7 @@ public:
             this->alle[i].x[0] += strain;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
+            this->alls[i] += strain * stdSoftness;
         }
     }
 
