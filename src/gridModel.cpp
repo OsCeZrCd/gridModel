@@ -248,7 +248,7 @@ public:
             restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
             movingAverageTarget[index]=0.99*movingAverageTarget[index]+0.01*s;
 
-            double stddev = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient));
+            double stddev = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient)) * stdSoftness;
             std::normal_distribution<double> noiseDistribution(0.0, stddev);
             harmonicDiffusion = noiseDistribution(engine);
         }
