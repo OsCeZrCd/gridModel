@@ -82,7 +82,6 @@ public:
 
     std::vector<double> movingAverageTarget;
 
-
     //In this version of the program, length of a rearrangement in frames is determined from the intensity
     //int rearrangeFrameLength;
 
@@ -96,6 +95,10 @@ public:
         this->allocate();
         this->getBuffer();
         this->initialize();
+
+        //these intial values for the moving average comes from measurements from a run that makes softness restore to global average 
+        movingAverageTarget[1] = 13.3084;
+        movingAverageTarget[2] = 14.352;
     }
 
     void openNewDumpFile(const std::string &filename)
@@ -195,8 +198,8 @@ public:
         double sigma = 3.0;
 
         double yieldStress = mu /*+ std::sqrt(2.0) * sigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1)*/;
-        if(yieldStress<1.0)
-            yieldStress=1.0;
+        if (yieldStress < 1.0)
+            yieldStress = 1.0;
         double yieldStrain = yieldStress / modulus;
         return yieldStrain;
     }
@@ -226,16 +229,16 @@ public:
 
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
-        const double angularContributionCoefficient=5.37/2.0;
-        const double emaMeanShift=0.0;
+        const double angularContributionCoefficient = 5.37 / 2.0;
+        const double emaMeanShift = 0.0;
         if (r == 0.0)
             return 0.0; // delta S of the rearranger is processed separately
 
         double meanContribution = 0.0;
         {
             double theta = std::atan2(dy, dx);
-            meanContribution += angularContributionCoefficient*rearrangingIntensity.x[0]*(-9.845 * std::cos(4 * theta) + 11.506 * std::sin(2 * theta)) / r / r;
-            meanContribution += angularContributionCoefficient*rearrangingIntensity.x[1]*(9.845 * std::cos(4 * theta) + 11.506 * std::cos(2 * theta)) / r / r;
+            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * (-9.845 * std::cos(4 * theta) + 11.506 * std::sin(2 * theta)) / r / r;
+            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * (9.845 * std::cos(4 * theta) + 11.506 * std::cos(2 * theta)) / r / r;
         }
 
         double restore = 0.0;
@@ -244,11 +247,11 @@ public:
         {
             double softnessRestoringCoefficient = 1e-2;
 
-            int index=std::floor(r);
+            int index = std::floor(r);
             restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
-            movingAverageTarget[index]=0.99*movingAverageTarget[index]+0.01*s;
+            movingAverageTarget[index] = 0.99 * movingAverageTarget[index] + 0.01 * s;
 
-            double stddev = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient)) * stdSoftness;
+            double stddev = std::sqrt(softnessRestoringCoefficient * (2.0 - softnessRestoringCoefficient)) * stdSoftness;
             std::normal_distribution<double> noiseDistribution(0.0, stddev);
             harmonicDiffusion = noiseDistribution(engine);
         }
@@ -710,4 +713,10 @@ int main()
 
         outputStrainFunc();
     }
+
+    // std::cout << "EMA target is:";
+    // for (auto a : model.movingAverageTarget)
+    //     std::cout << a << std::endl;
+
+    return 0;
 }
