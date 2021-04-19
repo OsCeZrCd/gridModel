@@ -231,19 +231,19 @@ public:
     {
         const double angularContributionCoefficient = 5.37 / 2.0;
         const double emaMeanShift = 0.0;
-        if (r == 0.0)
-            return 0.0; // delta S of the rearranger is processed separately
 
         double meanContribution = 0.0;
+        double restore = 0.0;
+        double harmonicDiffusion = 0.0;
+
+        if (r != 0.0)
         {
             double theta = std::atan2(dy, dx);
             meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * (-9.845 * std::cos(4 * theta) + 11.506 * std::sin(2 * theta)) / r / r;
             meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * (9.845 * std::cos(4 * theta) + 11.506 * std::cos(2 * theta)) / r / r;
         }
 
-        double restore = 0.0;
-        double harmonicDiffusion = 0.0;
-        if (r > 0 && r < 2.99)
+        if (r < 2.99)
         {
             double softnessRestoringCoefficient = 1e-2;
 
@@ -621,7 +621,7 @@ public:
                                 rearrangeFrameLength[i] = 0;
                                 rearrangingStep[i] = 0;
                                 hasRearranged[i] = 1;
-                                alls[i] = sDistribution(rEngine);
+                                //alls[i] = sDistribution(rEngine);
                                 yieldStrainPx[i] = PxDistribution(rEngine);
                             }
                         }
