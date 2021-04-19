@@ -80,6 +80,9 @@ public:
     netCDF::NcVar eVar, sVar, hasRearrangedVar;
     netCDF::NcVar coeffVar;
 
+    std::vector<double> movingAverageTarget;
+
+
     //In this version of the program, length of a rearrangement in frames is determined from the intensity
     //int rearrangeFrameLength;
 
@@ -87,7 +90,8 @@ public:
                                                    eDistribution(0.0, 0.001),
                                                    residualStrainDistribution(-0.0, 0.0),
                                                    sDistribution(meanSoftness, stdSoftness),
-                                                   nGridPerSide(nGrid), lGrid(lGrid)
+                                                   nGridPerSide(nGrid), lGrid(lGrid),
+                                                   movingAverageTarget(10, meanSoftness)
     {
         this->allocate();
         this->getBuffer();
@@ -223,25 +227,32 @@ public:
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
         const double angularContributionCoefficient=5.37/2.0;
+        const double emaMeanShift=0.0;
         if (r == 0.0)
             return 0.0; // delta S of the rearranger is processed separately
 
         double meanContribution = 0.0;
         {
-            meanContribution += std::sqrt(rearrangingIntensity.Modulus2())*2.0424*std::pow(r, -2.5187);
             double theta = std::atan2(dy, dx);
             meanContribution += angularContributionCoefficient*rearrangingIntensity.x[0]*(-9.845 * std::cos(4 * theta) + 11.506 * std::sin(2 * theta)) / r / r;
             meanContribution += angularContributionCoefficient*rearrangingIntensity.x[1]*(9.845 * std::cos(4 * theta) + 11.506 * std::cos(2 * theta)) / r / r;
         }
 
         double restore = 0.0;
+        double harmonicDiffusion = 0.0;
         if (r > 0 && r < 2.99)
         {
             double softnessRestoringCoefficient = 1e-2;
-            restore = softnessRestoringCoefficient * (meanSoftness - s);
+
+            int index=std::floor(r);
+            restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
+            movingAverageTarget[index]=0.99*movingAverageTarget[index]+0.01*s;
+
+            double stddev = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient));
+            std::normal_distribution<double> noiseDistribution(0.0, stddev);
+            harmonicDiffusion = noiseDistribution(engine);
         }
 
-        double harmonicDiffusion = 0.0;
         // if (r > 0 && r < 20)
         // {
         //     std::normal_distribution<double> noiseDistribution(0.0, 0.63 * std::pow(r, -1.55));
