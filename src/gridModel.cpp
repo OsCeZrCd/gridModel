@@ -308,7 +308,7 @@ public:
         double harmonicDiffusion = 0.0;
         if (r > 0 && r < 20)
         {
-            double stddev = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient));
+            double stddev = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient)) * stdSoftness;
             std::normal_distribution<double> noiseDistribution(0.0, stddev);
             harmonicDiffusion = noiseDistribution(engine);
         }
