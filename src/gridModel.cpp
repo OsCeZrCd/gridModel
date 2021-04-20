@@ -295,7 +295,9 @@ public:
             meanContribution = 0.0;
 
         const double alpha = 0.06, beta = -3.1;
-        double softnessRestoringCoefficient = alpha * std::pow(r, beta);
+
+        double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
+        double softnessRestoringCoefficient = alpha * std::pow(r, beta) * intensityModulus/0.1;
 
         double restore = 0.0;
         if (r > 0 && r < 10)
@@ -578,7 +580,7 @@ public:
             this->alle[i].x[0] += strain;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
-            this->alls[i] += strain * stdSoftness;
+            this->alls[i] += strain * 2.354;
         }
     }
 
