@@ -85,20 +85,37 @@ public:
     //In this version of the program, length of a rearrangement in frames is determined from the intensity
     //int rearrangeFrameLength;
 
+    //due to discreteness, the sum over all grid points cos(4theta)/r^2 is not zero. This is the correction.
+    double cos4ThetaCorrection;
+
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                                    eDistribution(0.0, 0.001),
                                                    residualStrainDistribution(-0.0, 0.0),
                                                    sDistribution(meanSoftness, stdSoftness),
                                                    nGridPerSide(nGrid), lGrid(lGrid),
-                                                   movingAverageTarget(10, meanSoftness)
+                                                   movingAverageTarget(30, meanSoftness)
     {
         this->allocate();
         this->getBuffer();
         this->initialize();
 
-        //these intial values for the moving average comes from measurements from a run that makes softness restore to global average 
+        //these intial values for the moving average comes from measurements from a run that makes softness restore to global average
         movingAverageTarget[1] = 13.3084;
         movingAverageTarget[2] = 14.352;
+
+        //determine cos(4theta) correction
+        double sum = 0.0;
+        for (int i = 0; i < nGridPerSide; i++)
+            for (int j = 0; j < nGridPerSide; j++)
+            {
+                double dx = (i - bufferCenter) * lGrid;
+                double dy = (j - bufferCenter) * lGrid;
+                double r = std::sqrt(dx * dx + dy * dy);
+                double theta = std::atan2(dy, dx);
+                if (r != 0.0)
+                    sum += std::cos(4 * theta) / r / r;
+            }
+        this->cos4ThetaCorrection = (-1.0) * sum / nGridPerSide / nGridPerSide;
     }
 
     void openNewDumpFile(const std::string &filename)
@@ -239,13 +256,20 @@ public:
         if (r != 0.0)
         {
             double theta = std::atan2(dy, dx);
-            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * (-9.845 * std::cos(4 * theta) + 11.506 * std::sin(2 * theta)) / r / r;
-            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * (9.845 * std::cos(4 * theta) + 11.506 * std::cos(2 * theta)) / r / r;
+            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * 11.506 * std::sin(2 * theta) / r / r;
+            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * 11.506 * std::cos(2 * theta) / r / r;
+
+            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * -9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
+            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * 9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
         }
 
         if (r < 2.99)
         {
-            double softnessRestoringCoefficient = 1e-2;
+            //this is eta from measured stddev of dS
+            //double vds = 0.87573 * ((r > 0) ? std::pow(r, -1.971) : 1.0);
+            //double softnessRestoringCoefficient = 1 - std::sqrt(1 - vds / stdSoftness);
+
+            double softnessRestoringCoefficient = 2e-2;
 
             int index = std::floor(r);
             restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
