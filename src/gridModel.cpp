@@ -43,7 +43,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
-const double meanSoftness = 15.3;
+const double meanSoftness = 14.81;
 const double stdSoftness = 3.17;
 
 class gridModel
@@ -210,8 +210,9 @@ public:
     double deviatoricYieldStrain(int i)
     {
         double s = alls[i];
+        auto e = alle[i];
 
-        double mu = s;
+        double mu = s - 478.3815 * e.Modulus2();
         double sigma = 3.0;
 
         double yieldStress = mu /*+ std::sqrt(2.0) * sigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1)*/;
@@ -253,23 +254,28 @@ public:
         double restore = 0.0;
         double harmonicDiffusion = 0.0;
 
+        double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
+
         if (r != 0.0)
         {
             double theta = std::atan2(dy, dx);
             meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * 11.506 * std::sin(2 * theta) / r / r;
             meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * 11.506 * std::cos(2 * theta) / r / r;
 
-            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * -9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
-            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * 9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
+            //meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * -9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
+            //meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * 9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
+
+            if (r < 10.0)
+                meanContribution += 0.45865 * (intensityModulus / 0.1) * std::pow(r, -3.0642);
         }
 
-        if (r < 2.99)
+        if (r < 30.0)
         {
             //this is eta from measured stddev of dS
-            //double vds = 0.87573 * ((r > 0) ? std::pow(r, -1.971) : 1.0);
-            //double softnessRestoringCoefficient = 1 - std::sqrt(1 - vds / stdSoftness);
+            double vds = 0.87573 * (intensityModulus / 0.1) * ((r > 0) ? std::pow(r, -1.971) : 1.0);
+            double softnessRestoringCoefficient = 1 - std::sqrt(1 - vds / stdSoftness);
 
-            double softnessRestoringCoefficient = 2e-2;
+            //double softnessRestoringCoefficient = 2e-2;
 
             int index = std::floor(r);
             restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
@@ -548,7 +554,11 @@ public:
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
-            this->alle[i].x[0] += strain;
+            double oldStrain = this->alle[i].x[0];
+            double newStrain = oldStrain + strain;
+            //this->alls[i] -= 478.3815 * (newStrain * newStrain - oldStrain * oldStrain);
+
+            this->alle[i].x[0] = newStrain;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
         }
@@ -703,7 +713,7 @@ int main()
     double totalExternalStrain = 0.0;
     while (totalExternalStrain < 0.15)
     {
-        double strain = model.minimumXyStrainDistanceToRarranging() + 1e-10;
+        double strain = std::min(model.minimumXyStrainDistanceToRarranging() + 1e-10, 1e-3);
         model.shear(strain);
         totalExternalStrain += strain;
 
@@ -721,17 +731,8 @@ int main()
         bool avalanched;
         avalanched = model.avalanche("");
 
-        if (avalanched)
-        {
-            std::cout << numAvalanche << "avalanches so far.\n";
-            model.dump(true, true, true, true);
-        }
-        else
-        {
-            //the shear strain should be enough to trigger at least one rearrangement
-            std::cerr << "Error in main : expected rearrangement did not occur\n";
-            exit(1);
-        }
+        std::cout << numAvalanche << "avalanches so far.\n";
+        model.dump(true, true, true, true);
 
         numAvalanche += avalanched;
 
