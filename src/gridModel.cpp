@@ -265,8 +265,8 @@ public:
             //meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * -9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
             //meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * 9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
 
-            if (r < 10.0)
-                meanContribution += 0.45865 * (intensityModulus / 0.1) * std::pow(r, -3.0642);
+            //if (r < 10.0)
+            //    meanContribution += 0.45865 * (intensityModulus / 0.1) * std::pow(r, -3.0642);
         }
 
         if (r < 30.0)
@@ -655,7 +655,7 @@ public:
                                 rearrangeFrameLength[i] = 0;
                                 rearrangingStep[i] = 0;
                                 hasRearranged[i] = 1;
-                                //alls[i] = sDistribution(rEngine);
+                                alls[i] = sDistribution(rEngine);
                                 yieldStrainPx[i] = PxDistribution(rEngine);
                             }
                         }
