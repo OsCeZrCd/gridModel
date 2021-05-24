@@ -42,6 +42,8 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 
 const double meanSoftness = -1.882;
 const double stdSoftness = 2.0;
+//const double dSoftnessDStrain = 2.354;
+const double dSoftnessDStrain = 0.0;
 
 std::vector<double> numericalDsR =
     {
@@ -127,16 +129,39 @@ public:
     //In this version of the program, length of a rearrangement in frames is determined from the intensity
     //int rearrangeFrameLength;
 
+    const double emaMeanShift = -5.0;
+    const double alpha = 0.6, beta = -3.1;
+
+    double softnessChangeShift = 0.0;
+
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                                    eDistribution(0.0, 0.01),
                                                    residualStrainDistribution(0.0, 0.0),
                                                    sDistribution(meanSoftness, stdSoftness),
                                                    nGridPerSide(nGrid), lGrid(lGrid),
-                                                   movingAverageTarget(10, meanSoftness)
+                                                   movingAverageTarget(11, meanSoftness)
     {
         this->allocate();
         this->getBuffer();
         this->initialize();
+
+        //calculate softnessChangeShift, which is a background softness change for every block assuming the rearranging intensity is 1.0
+        double sumExpectedDs = 0.0;
+        for (int i = 0; i < nGridPerSide; i++)
+            for (int j = 0; j < nGridPerSide; j++)
+            {
+                double dx = (i - bufferCenter) * lGrid;
+                double dy = (j - bufferCenter) * lGrid;
+                double r = std::sqrt(dx * dx + dy * dy);
+                if (r < 10)
+                {
+                    double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0);
+                    sumExpectedDs += softnessRestoringCoefficient * emaMeanShift;
+                }
+            }
+        //debug temp
+        std::cout << "sumExpectedDs=" << sumExpectedDs << std::endl;
+        softnessChangeShift = ((-1.0) * sumExpectedDs - dSoftnessDStrain) / nGridPerSide / nGridPerSide;
     }
 
     void openNewDumpFile(const std::string &filename)
@@ -267,9 +292,10 @@ public:
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
         const double angularContributionCoefficient = 10.0;
-        const double emaMeanShift=-5.0;
         if (r == 0.0)
             return 0.0; // delta S of the rearranger is processed separately
+
+        double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
 
         double meanContribution = 0.0;
         if (r < 30)
@@ -291,26 +317,22 @@ public:
             meanContribution -= angularContributionCoefficient * 1.6 * rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
             meanContribution -= angularContributionCoefficient * 1.6 * rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
         }
-        else
-            meanContribution = 0.0;
+        meanContribution += intensityModulus * softnessChangeShift;
 
-        const double alpha = 0.06, beta = -3.1;
-
-        double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
-        double softnessRestoringCoefficient = alpha * std::pow(r, beta) * intensityModulus/0.1;
+        double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0);
 
         double restore = 0.0;
-        if (r > 0 && r < 10)
+        if (r < 10)
         {
-            int index=std::floor(r);
-            restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
-            movingAverageTarget[index]=0.99*movingAverageTarget[index]+0.01*s;
+            int index = std::floor(r + 0.5);
+            restore = softnessRestoringCoefficient * intensityModulus * (movingAverageTarget[index] + emaMeanShift - s);
+            movingAverageTarget[index] = 0.99 * movingAverageTarget[index] + 0.01 * s;
         }
 
         double harmonicDiffusion = 0.0;
         if (r > 0 && r < 20)
         {
-            double stddev = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient)) * stdSoftness;
+            double stddev = std::sqrt(softnessRestoringCoefficient * (2.0 - softnessRestoringCoefficient)) * stdSoftness;
             std::normal_distribution<double> noiseDistribution(0.0, stddev);
             harmonicDiffusion = noiseDistribution(engine);
         }
@@ -580,7 +602,7 @@ public:
             this->alle[i].x[0] += strain;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
-            this->alls[i] += strain * 2.354;
+            this->alls[i] += strain * dSoftnessDStrain;
         }
     }
 
@@ -705,8 +727,8 @@ public:
                                 yieldStrainPx[i] = PxDistribution(rEngine);
 
                                 //my simulation suggests this
-                                double dsCenter = std::min(-0.2 - 0.13 * alls[i], 0.25);
-                                alls[i] += dsCenter;
+                                //double dsCenter = std::min(-0.2 - 0.13 * alls[i], 0.25);
+                                //alls[i] += dsCenter;
                             }
                         }
                     }
@@ -727,7 +749,7 @@ public:
                 }
             }
         }
-        std::cout<<"steps in this avalanche="<<nStep<<std::endl;
+        std::cout << "steps in this avalanche=" << nStep << std::endl;
         return avalancheHappened;
     }
 };
