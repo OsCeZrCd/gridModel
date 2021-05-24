@@ -320,19 +320,20 @@ public:
         meanContribution += intensityModulus * softnessChangeShift;
 
         double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0);
+        double eta = softnessRestoringCoefficient * intensityModulus;
 
         double restore = 0.0;
         if (r < 10)
         {
             int index = std::floor(r + 0.5);
-            restore = softnessRestoringCoefficient * intensityModulus * (movingAverageTarget[index] + emaMeanShift - s);
+            restore = eta * (movingAverageTarget[index] + emaMeanShift - s);
             movingAverageTarget[index] = 0.99 * movingAverageTarget[index] + 0.01 * s;
         }
 
         double harmonicDiffusion = 0.0;
         if (r > 0 && r < 20)
         {
-            double stddev = std::sqrt(softnessRestoringCoefficient * (2.0 - softnessRestoringCoefficient)) * stdSoftness;
+            double stddev = std::sqrt(eta * (2.0 - eta)) * stdSoftness;
             std::normal_distribution<double> noiseDistribution(0.0, stddev);
             harmonicDiffusion = noiseDistribution(engine);
         }
