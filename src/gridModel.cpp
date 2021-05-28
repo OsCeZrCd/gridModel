@@ -292,13 +292,13 @@ public:
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
         const double angularContributionCoefficient = 10.0;
-        if (r == 0.0)
-            return 0.0; // delta S of the rearranger is processed separately
+        //if (r == 0.0)
+        //    return 0.0; // delta S of the rearranger is processed separately
 
         double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
 
         double meanContribution = 0.0;
-        if (r < 30)
+        if (r < 30 && r>0)
         {
             //interpolate numericalDs
             /*auto iter = std::lower_bound(numericalDsR.begin(), numericalDsR.end(), r);
@@ -327,11 +327,11 @@ public:
         {
             int index = std::floor(r + 0.5);
             restore = eta * (movingAverageTarget[index] + emaMeanShift - s);
-            movingAverageTarget[index] = 0.99 * movingAverageTarget[index] + 0.01 * s;
+            movingAverageTarget[index] = 0.999 * movingAverageTarget[index] + 0.001 * s;
         }
 
         double harmonicDiffusion = 0.0;
-        if (r > 0 && r < 20)
+        if (r < 20)
         {
             double stddev = std::sqrt(eta * (2.0 - eta)) * stdSoftness;
             std::normal_distribution<double> noiseDistribution(0.0, stddev);
