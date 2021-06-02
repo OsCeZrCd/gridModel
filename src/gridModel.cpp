@@ -40,10 +40,11 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
+const double angularContributionCoefficient = 10.0;
 const double meanSoftness = -1.882;
 const double stdSoftness = 2.0;
-//const double dSoftnessDStrain = 2.354;
-const double dSoftnessDStrain = 0.0;
+const double dSoftnessDStrain = 2.354;
+//const double dSoftnessDStrain = 0.0;
 
 std::vector<double> numericalDsR =
     {
@@ -161,7 +162,7 @@ public:
             }
         //debug temp
         std::cout << "sumExpectedDs=" << sumExpectedDs << std::endl;
-        softnessChangeShift = ((-1.0) * sumExpectedDs - dSoftnessDStrain) / nGridPerSide / nGridPerSide;
+        softnessChangeShift = ((-1.0) * sumExpectedDs) / nGridPerSide / nGridPerSide;
     }
 
     void openNewDumpFile(const std::string &filename)
@@ -291,11 +292,11 @@ public:
 
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
-        const double angularContributionCoefficient = 10.0;
         //if (r == 0.0)
         //    return 0.0; // delta S of the rearranger is processed separately
 
         double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
+        double softnessChangeShift2=(-1.0)*dSoftnessDStrain*rearrangingIntensity.x[0]/nGridPerSide/nGridPerSide;
 
         double meanContribution = 0.0;
         if (r < 30 && r>0)
@@ -317,7 +318,7 @@ public:
             meanContribution -= angularContributionCoefficient * 1.6 * rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
             meanContribution -= angularContributionCoefficient * 1.6 * rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
         }
-        meanContribution += intensityModulus * softnessChangeShift;
+        meanContribution += intensityModulus * softnessChangeShift + softnessChangeShift2;
 
         double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0);
         double eta = softnessRestoringCoefficient * intensityModulus;
