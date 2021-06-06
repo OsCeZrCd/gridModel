@@ -43,8 +43,8 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 const double angularContributionCoefficient = 10.0;
 const double meanSoftness = -1.882;
 const double stdSoftness = 2.0;
-const double dSoftnessDStrain = 2.354;
-//const double dSoftnessDStrain = 0.0;
+const double dSoftnessDStrain2 = 101.3;
+//const double dSoftnessDStrain2 = 0.0;
 
 std::vector<double> numericalDsR =
     {
@@ -296,7 +296,7 @@ public:
         //    return 0.0; // delta S of the rearranger is processed separately
 
         double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
-        double softnessChangeShift2=(-1.0)*dSoftnessDStrain*rearrangingIntensity.x[0]/nGridPerSide/nGridPerSide;
+        double softnessChangeShift2=(-1.0)*dSoftnessDStrain2*rearrangingIntensity.Modulus2()/nGridPerSide/nGridPerSide;
 
         double meanContribution = 0.0;
         if (r < 30 && r>0)
@@ -601,10 +601,11 @@ public:
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
+            double olde2=this->alle[i].Modulus2();
             this->alle[i].x[0] += strain;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
-            this->alls[i] += strain * dSoftnessDStrain;
+            this->alls[i] += (this->alle[i].Modulus2()-olde2) * dSoftnessDStrain2;
         }
     }
 
@@ -694,6 +695,7 @@ public:
                                     yInBuffer -= nGridPerSide;
                                 //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
                                 GeometryVector &e = alle[x * nGridPerSide + y];
+                                double olde2=e.Modulus2();
 
                                 for (int j = 0; j < MaxDimension; j++)
                                 {
@@ -706,7 +708,7 @@ public:
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
                                 double ds = dsFromRearranger(dx, dy, r, alls[x * nGridPerSide + y], rearrangingIntensity[i], threadEngine);
-                                alls[x * nGridPerSide + y] += ds;
+                                alls[x * nGridPerSide + y] += ds + dSoftnessDStrain2*(e.Modulus2()-olde2);
                             }
                         }
                         numRearrange++;
