@@ -296,7 +296,8 @@ public:
         //    return 0.0; // delta S of the rearranger is processed separately
 
         double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
-        double softnessChangeShift2=(-1.0)*dSoftnessDStrain2*rearrangingIntensity.Modulus2()/nGridPerSide/nGridPerSide;
+        //double softnessChangeShift2=(-1.0)*dSoftnessDStrain2*rearrangingIntensity.Modulus2()/nGridPerSide/nGridPerSide;
+        double softnessChangeShift2=0.0;
 
         double meanContribution = 0.0;
         if (r < 30 && r>0)
