@@ -169,26 +169,26 @@ public:
 
     double deviatoricYieldStrain(int i)
     {
-        double s=alls[i];
+        double s = alls[i];
         double meanYieldStrain = 0.07 - 0.01 * s;
         meanYieldStrain = std::max(meanYieldStrain, 0.05);
         //weibull distribution
-        double k= 2.0758 - 0.024151 * s + 0.0029429 *s*s; 
-        double lambda = meanYieldStrain/std::tgamma(1.0+1.0/k);
+        double k = 2.0758 - 0.024151 * s + 0.0029429 * s * s;
+        double lambda = meanYieldStrain / std::tgamma(1.0 + 1.0 / k);
 
-        double yieldStrain = std::pow(-1.0*std::log(1.0-yieldStrainPx[i]), 1.0/k)*lambda;
+        double yieldStrain = std::pow(-1.0 * std::log(1.0 - yieldStrainPx[i]), 1.0 / k) * lambda;
         return yieldStrain;
     }
     bool startRearranging(int i)
     {
         double yieldStrain = deviatoricYieldStrain(i);
-        auto e=alle[i];
+        auto e = alle[i];
         return e.Modulus2() > yieldStrain * yieldStrain;
     }
     double xyStrainDistanceToRarranging(int i)
     {
         double yieldStrain = deviatoricYieldStrain(i);
-        auto e=alle[i];
+        auto e = alle[i];
         if (e.Modulus2() > yieldStrain * yieldStrain)
             return 0.0;
         else
@@ -268,12 +268,12 @@ public:
                 for (int j = 0; j < nGridPerSide; j++)
                 {
                     int index = i * nGridPerSide + j;
-                    int ii = i - bufferCenter;
-                    while (ii < 0)
-                        ii += nGridPerSide;
-                    int jj = j - bufferCenter;
-                    while (jj < 0)
-                        jj += nGridPerSide;
+                    int ii = i + bufferCenter;
+                    while (ii >= nGridPerSide)
+                        ii -= nGridPerSide;
+                    int jj = j + bufferCenter;
+                    while (jj >= nGridPerSide)
+                        jj -= nGridPerSide;
                     int index2 = ii * nGridPerSide + jj;
                     dEBuffer[0][index2] = GeometryVector(outbuf[index].r * factor[0] - meanStrainDecrement, 0.0);
                 }
@@ -316,12 +316,12 @@ public:
                 for (int j = 0; j < nGridPerSide; j++)
                 {
                     int index = i * nGridPerSide + j;
-                    int ii = i - bufferCenter;
-                    while (ii < 0)
-                        ii += nGridPerSide;
-                    int jj = j - bufferCenter;
-                    while (jj < 0)
-                        jj += nGridPerSide;
+                    int ii = i + bufferCenter;
+                    while (ii >= nGridPerSide)
+                        ii -= nGridPerSide;
+                    int jj = j + bufferCenter;
+                    while (jj >= nGridPerSide)
+                        jj -= nGridPerSide;
                     int index2 = ii * nGridPerSide + jj;
                     dEBuffer[1][index2] = GeometryVector(0.0, outbuf[index].r * factor[1] - meanStrainDecrement);
                 }
@@ -361,12 +361,12 @@ public:
                 for (int j = 0; j < nGridPerSide; j++)
                 {
                     int index = i * nGridPerSide + j;
-                    int ii = i - bufferCenter;
-                    while (ii < 0)
-                        ii += nGridPerSide;
-                    int jj = j - bufferCenter;
-                    while (jj < 0)
-                        jj += nGridPerSide;
+                    int ii = i + bufferCenter;
+                    while (ii >= nGridPerSide)
+                        ii -= nGridPerSide;
+                    int jj = j + bufferCenter;
+                    while (jj >= nGridPerSide)
+                        jj -= nGridPerSide;
                     int index2 = ii * nGridPerSide + jj;
                     dEBuffer[0][index2].x[1] = outbuf[index].r * factor[0];
                     dEBuffer[1][index2].x[0] = outbuf[index].r * factor[1];
@@ -380,13 +380,40 @@ public:
         //debug temp
         // std::cout << std::scientific;
         // std::cout << factor[0] << " " << factor[1] << std::endl;
-        // std::vector<double> temp(nGridPerSide*nGridPerSide, 0.0);
+        // std::vector<double> temp(nGridPerSide * nGridPerSide, 0.0);
         // for (int i = 0; i < nGridPerSide; i++)
         // {
         //     for (int j = 0; j < nGridPerSide; j++)
         //     {
         //         int index = i * nGridPerSide + j;
-        //         temp[index]=dEBuffer[1][index].x[1];
+        //         temp[index] = dEBuffer[0][index].x[0];
+        //     }
+        // }
+        // plot(temp, nGridPerSide, "e00");
+        // for (int i = 0; i < nGridPerSide; i++)
+        // {
+        //     for (int j = 0; j < nGridPerSide; j++)
+        //     {
+        //         int index = i * nGridPerSide + j;
+        //         temp[index] = dEBuffer[0][index].x[1];
+        //     }
+        // }
+        // plot(temp, nGridPerSide, "e01");
+        // for (int i = 0; i < nGridPerSide; i++)
+        // {
+        //     for (int j = 0; j < nGridPerSide; j++)
+        //     {
+        //         int index = i * nGridPerSide + j;
+        //         temp[index] = dEBuffer[1][index].x[0];
+        //     }
+        // }
+        // plot(temp, nGridPerSide, "e10");
+        // for (int i = 0; i < nGridPerSide; i++)
+        // {
+        //     for (int j = 0; j < nGridPerSide; j++)
+        //     {
+        //         int index = i * nGridPerSide + j;
+        //         temp[index] = dEBuffer[1][index].x[1];
         //     }
         // }
         // plot(temp, nGridPerSide, "e11");
@@ -558,12 +585,12 @@ public:
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
                                 const double alpha = 0.087, beta = -3.68;
-                                if (r > 0 && r<10)
+                                if (r > 0 && r < 10)
                                 {
                                     double softnessRestoringCoefficient = alpha * std::pow(r, beta);
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
                                 }
-                                else if (r<20)
+                                else if (r < 20)
                                 {
                                     double softnessRestoringCoefficient = -1e-5;
                                     restore = softnessRestoringCoefficient * (meanSoftness - alls[x * nGridPerSide + y]);
@@ -599,7 +626,7 @@ public:
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-                        std::cout << "num rearranger in this frame=" << numRearrange <<std::endl;
+                        std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
 
                         if (outputPrefix != std::string(""))
                         {
