@@ -130,17 +130,18 @@ public:
     //In this version of the program, length of a rearrangement in frames is determined from the intensity
     //int rearrangeFrameLength;
 
-    const double emaMeanShift = -5.0;
+    double emaMeanShift;
     const double alpha = 0.6, beta = -3.1;
 
     double softnessChangeShift = 0.0;
 
-    gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
-                                                   eDistribution(0.0, 0.01),
-                                                   residualStrainDistribution(0.0, 0.0),
-                                                   sDistribution(meanSoftness, stdSoftness),
-                                                   nGridPerSide(nGrid), lGrid(lGrid),
-                                                   movingAverageTarget(11, meanSoftness)
+    gridModel(int nGrid, double lGrid, int seed, double emaMeanShift) : rEngine(seed),
+                                                                        eDistribution(0.0, 0.01),
+                                                                        residualStrainDistribution(0.0, 0.0),
+                                                                        sDistribution(meanSoftness, stdSoftness),
+                                                                        nGridPerSide(nGrid), lGrid(lGrid),
+                                                                        movingAverageTarget(11, meanSoftness),
+                                                                        emaMeanShift(emaMeanShift)
     {
         this->allocate();
         this->getBuffer();
@@ -297,10 +298,10 @@ public:
 
         double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
         //double softnessChangeShift2=(-1.0)*dSoftnessDStrain2*rearrangingIntensity.Modulus2()/nGridPerSide/nGridPerSide;
-        double softnessChangeShift2=0.0;
+        double softnessChangeShift2 = 0.0;
 
         double meanContribution = 0.0;
-        if (r < 30 && r>0)
+        if (r < 30 && r > 0)
         {
             //interpolate numericalDs
             /*auto iter = std::lower_bound(numericalDsR.begin(), numericalDsR.end(), r);
@@ -629,11 +630,11 @@ public:
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
-            double olde2=this->alle[i].Modulus2();
+            double olde2 = this->alle[i].Modulus2();
             this->alle[i].x[0] += strain;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
-            this->alls[i] += (this->alle[i].Modulus2()-olde2) * dSoftnessDStrain2;
+            this->alls[i] += (this->alle[i].Modulus2() - olde2) * dSoftnessDStrain2;
         }
     }
 
@@ -723,7 +724,7 @@ public:
                                     yInBuffer -= nGridPerSide;
                                 //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
                                 GeometryVector &e = alle[x * nGridPerSide + y];
-                                double olde2=e.Modulus2();
+                                double olde2 = e.Modulus2();
 
                                 for (int j = 0; j < MaxDimension; j++)
                                 {
@@ -736,7 +737,7 @@ public:
                                 double dy = (yInBuffer - bufferCenter) * lGrid;
                                 double r = std::sqrt(dx * dx + dy * dy);
                                 double ds = dsFromRearranger(dx, dy, r, alls[x * nGridPerSide + y], rearrangingIntensity[i], threadEngine);
-                                alls[x * nGridPerSide + y] += ds + dSoftnessDStrain2*(e.Modulus2()-olde2);
+                                alls[x * nGridPerSide + y] += ds + dSoftnessDStrain2 * (e.Modulus2() - olde2);
                             }
                         }
                         numRearrange++;
@@ -801,8 +802,9 @@ int main()
 
     const int nGridPerSide = 316;
     int seed, dumpLevel;
-    std::cin >> seed >> dumpLevel;
-    gridModel model(nGridPerSide, 1.0, seed);
+    double emaMeanShift;
+    std::cin >> seed >> dumpLevel >> emaMeanShift;
+    gridModel model(nGridPerSide, 1.0, seed, emaMeanShift);
     if (fileExists(ncFileName))
     {
         model.initializeFromDumpFile(ncFileName);
@@ -817,9 +819,10 @@ int main()
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    while (totalExternalStrain < 0.1)
+    double strainOverStep = 1e-10;
+    while (totalExternalStrain < 0.2)
     {
-        double strain = model.minimumXyStrainDistanceToRarranging() + 1e-10;
+        double strain = model.minimumXyStrainDistanceToRarranging() + strainOverStep;
         model.shear(strain);
         totalExternalStrain += strain;
 
@@ -849,16 +852,14 @@ int main()
                 else
                     model.dump(false, false, false, true);
             }
+            numAvalanche++;
+            outputStrainFunc();
         }
         else
         {
             //the shear strain should be enough to trigger at least one rearrangement
-            std::cerr << "Error in main : expected rearrangement did not occur\n";
-            exit(1);
+            strainOverStep *= 10;
+            std::cout << "Error in main : expected rearrangement did not occur, increase strainOverStep to " << strainOverStep << "\n";
         }
-
-        numAvalanche += avalanched;
-
-        outputStrainFunc();
     }
 }
