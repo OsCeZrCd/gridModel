@@ -135,6 +135,16 @@ public:
 
     double softnessChangeShift = 0.0;
 
+    struct neighborRelease
+    {
+        int x, y;
+        double intensityCoeff;
+        neighborRelease(int x, int y, double i) : x(x), y(y), intensityCoeff(i)
+        {
+        }
+    };
+    std::vector<neighborRelease> neighborList;
+
     gridModel(int nGrid, double lGrid, int seed, double emaMeanShift) : rEngine(seed),
                                                                         eDistribution(0.0, 0.01),
                                                                         residualStrainDistribution(0.0, 0.0),
@@ -146,6 +156,12 @@ public:
         this->allocate();
         this->getBuffer();
         this->initialize();
+
+        neighborList.push_back(neighborRelease(0, 0, 1.0));
+        neighborList.push_back(neighborRelease(0, 1, 0.72));
+        neighborList.push_back(neighborRelease(0, -1, 0.72));
+        neighborList.push_back(neighborRelease(1, 0, 0.72));
+        neighborList.push_back(neighborRelease(-1, 0, 0.72));
 
         //calculate softnessChangeShift, which is a background softness change for every block assuming the rearranging intensity is 1.0
         double sumExpectedDs = 0.0;
@@ -689,13 +705,29 @@ public:
                         }
                     if (toRearrange >= 0)
                     {
-                        rearrangingStep[toRearrange] = 1;
-                        GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
-                        GeometryVector totalIntensity = (alle[toRearrange] - residual);
-                        rearrangeFrameLength[toRearrange] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2()) / 0.1)), 1);
-                        rearrangingIntensity[toRearrange] = totalIntensity * (1.0 / rearrangeFrameLength[toRearrange]);
+                        for (auto n : neighborList)
+                        {
+                            int x = toRearrange % nGridPerSide + n.x;
+                            while (x < 0)
+                                x += nGridPerSide;
+                            while (x >= nGridPerSide)
+                                x -= nGridPerSide;
+                            int y = toRearrange / nGridPerSide + n.y;
+                            while (y < 0)
+                                y += nGridPerSide;
+                            while (y >= nGridPerSide)
+                                y -= nGridPerSide;
+                            int toRearrange2 = y * nGridPerSide + x;
 
-                        avalancheHappened=true;
+                            rearrangingStep[toRearrange2] = 1;
+                            GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
+                            GeometryVector totalIntensity = n.intensityCoeff * (alle[toRearrange2] - residual);
+                            //rearrangeFrameLength[toRearrange2] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2()) / 0.1)), 1);
+                            rearrangeFrameLength[toRearrange2] = 1;
+                            rearrangingIntensity[toRearrange2] = totalIntensity * (1.0 / rearrangeFrameLength[toRearrange2]);
+
+                            avalancheHappened = true;
+                        }
                     }
                 }
 
