@@ -694,6 +694,8 @@ public:
                         GeometryVector totalIntensity = (alle[toRearrange] - residual);
                         rearrangeFrameLength[toRearrange] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2()) / 0.1)), 1);
                         rearrangingIntensity[toRearrange] = totalIntensity * (1.0 / rearrangeFrameLength[toRearrange]);
+
+                        avalancheHappened=true;
                     }
                 }
 
