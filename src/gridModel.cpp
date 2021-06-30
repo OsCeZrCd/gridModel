@@ -337,12 +337,12 @@ public:
                 for (int j = 0; j < nGridPerSide; j++)
                 {
                     int index = i * nGridPerSide + j;
-                    int ii = i - bufferCenter;
-                    while (ii < 0)
-                        ii += nGridPerSide;
-                    int jj = j - bufferCenter;
-                    while (jj < 0)
-                        jj += nGridPerSide;
+                    int ii = i + bufferCenter;
+                    while (ii >= nGridPerSide)
+                        ii -= nGridPerSide;
+                    int jj = j + bufferCenter;
+                    while (jj >= nGridPerSide)
+                        jj -= nGridPerSide;
                     int index2 = ii * nGridPerSide + jj;
                     dEBuffer[0][index2] = GeometryVector(outbuf[index].r * factor[0] - meanStrainDecrement, 0.0);
                 }
@@ -385,12 +385,12 @@ public:
                 for (int j = 0; j < nGridPerSide; j++)
                 {
                     int index = i * nGridPerSide + j;
-                    int ii = i - bufferCenter;
-                    while (ii < 0)
-                        ii += nGridPerSide;
-                    int jj = j - bufferCenter;
-                    while (jj < 0)
-                        jj += nGridPerSide;
+                    int ii = i + bufferCenter;
+                    while (ii >= nGridPerSide)
+                        ii -= nGridPerSide;
+                    int jj = j + bufferCenter;
+                    while (jj >= nGridPerSide)
+                        jj -= nGridPerSide;
                     int index2 = ii * nGridPerSide + jj;
                     dEBuffer[1][index2] = GeometryVector(0.0, outbuf[index].r * factor[1] - meanStrainDecrement);
                 }
@@ -430,12 +430,12 @@ public:
                 for (int j = 0; j < nGridPerSide; j++)
                 {
                     int index = i * nGridPerSide + j;
-                    int ii = i - bufferCenter;
-                    while (ii < 0)
-                        ii += nGridPerSide;
-                    int jj = j - bufferCenter;
-                    while (jj < 0)
-                        jj += nGridPerSide;
+                    int ii = i + bufferCenter;
+                    while (ii >= nGridPerSide)
+                        ii -= nGridPerSide;
+                    int jj = j + bufferCenter;
+                    while (jj >= nGridPerSide)
+                        jj -= nGridPerSide;
                     int index2 = ii * nGridPerSide + jj;
                     dEBuffer[0][index2].x[1] = outbuf[index].r * factor[0];
                     dEBuffer[1][index2].x[0] = outbuf[index].r * factor[1];
@@ -449,13 +449,40 @@ public:
         //debug temp
         // std::cout << std::scientific;
         // std::cout << factor[0] << " " << factor[1] << std::endl;
-        // std::vector<double> temp(nGridPerSide*nGridPerSide, 0.0);
+        // std::vector<double> temp(nGridPerSide * nGridPerSide, 0.0);
         // for (int i = 0; i < nGridPerSide; i++)
         // {
         //     for (int j = 0; j < nGridPerSide; j++)
         //     {
         //         int index = i * nGridPerSide + j;
-        //         temp[index]=dEBuffer[1][index].x[1];
+        //         temp[index] = dEBuffer[0][index].x[0];
+        //     }
+        // }
+        // plot(temp, nGridPerSide, "e00");
+        // for (int i = 0; i < nGridPerSide; i++)
+        // {
+        //     for (int j = 0; j < nGridPerSide; j++)
+        //     {
+        //         int index = i * nGridPerSide + j;
+        //         temp[index] = dEBuffer[0][index].x[1];
+        //     }
+        // }
+        // plot(temp, nGridPerSide, "e01");
+        // for (int i = 0; i < nGridPerSide; i++)
+        // {
+        //     for (int j = 0; j < nGridPerSide; j++)
+        //     {
+        //         int index = i * nGridPerSide + j;
+        //         temp[index] = dEBuffer[1][index].x[0];
+        //     }
+        // }
+        // plot(temp, nGridPerSide, "e10");
+        // for (int i = 0; i < nGridPerSide; i++)
+        // {
+        //     for (int j = 0; j < nGridPerSide; j++)
+        //     {
+        //         int index = i * nGridPerSide + j;
+        //         temp[index] = dEBuffer[1][index].x[1];
         //     }
         // }
         // plot(temp, nGridPerSide, "e11");
@@ -568,10 +595,32 @@ public:
         bool avalancheHappened = false;
         int nSite = nGridPerSide * nGridPerSide;
         int nStep = 0;
+        netCDF::NcFile avalancheProcessDumpFile;
+        netCDF::NcVar intensityVar;
+
+        if (outputPrefix != std::string(""))
+        {
+            avalancheProcessDumpFile.open(outputPrefix, netCDF::NcFile::replace);
+            int dim = 2;
+            std::vector<netCDF::NcDim> strainDims;
+
+            netCDF::NcDim framedim = avalancheProcessDumpFile.addDim("frames");
+            strainDims.push_back(framedim);
+            for (int i = 0; i < dim; i++)
+            {
+                std::stringstream ss;
+                ss << "dim_" << i;
+                netCDF::NcDim temp = avalancheProcessDumpFile.addDim(ss.str(), nGridPerSide);
+                strainDims.push_back(temp);
+            }
+            strainDims.push_back(avalancheProcessDumpFile.addDim("strainComponents", ::MaxDimension));
+
+            intensityVar = avalancheProcessDumpFile.addVar("rearrangingIntensity", netCDF::ncDouble, strainDims);
+            intensityVar.setCompression(true, true, 9);
+        }
 
         //if rearranging, the value is how much strain is redistributed per frame
-        std::vector<GeometryVector> rearrangingIntensity;
-        rearrangingIntensity.resize(nSite);
+        std::vector<GeometryVector> rearrangingIntensity(nSite, GeometryVector(0.0, 0.0));
         std::vector<int> rearrangeFrameLength(nSite, 0);
 
 #pragma omp parallel
@@ -653,6 +702,7 @@ public:
                             if (rearrangingStep[i] > rearrangeFrameLength[i])
                             {
                                 rearrangeFrameLength[i] = 0;
+                                rearrangingIntensity[i] = GeometryVector(0.0, 0.0);
                                 rearrangingStep[i] = 0;
                                 hasRearranged[i] = 1;
                                 alls[i] = sDistribution(rEngine);
@@ -668,9 +718,18 @@ public:
 
                         if (outputPrefix != std::string(""))
                         {
-                            std::stringstream ss;
-                            ss << outputPrefix << "_step_" << (nStep++);
-                            plot(this->rearrangingStep, nGridPerSide, ss.str());
+                            int framesAlreadyWritten = intensityVar.getDim(0).getSize();
+                            int dim = 2;
+                            std::vector<size_t> startp, countp;
+                            startp.push_back(framesAlreadyWritten); //start from the end of the previous frame
+                            for (int i = 0; i < dim; i++)
+                                startp.push_back(0);
+                            startp.push_back(0);
+                            countp.push_back(1); //write one frame
+                            for (int i = 0; i < dim; i++)
+                                countp.push_back(nGridPerSide);
+                            countp.push_back(::MaxDimension);
+                            intensityVar.putVar(startp, countp, rearrangingIntensity.data());
                         }
                     }
                 }
