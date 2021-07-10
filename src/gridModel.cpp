@@ -782,7 +782,7 @@ public:
                                     e.AddFrom(rearrangingIntensity[i].x[j] * de);
                                 }
 
-                                if (updateSoftness[x * nGridPerSide + y])
+                                if (updateSoftness[i])
                                 {
                                     double dx = (xInBuffer - bufferCenter) * lGrid;
                                     double dy = (yInBuffer - bufferCenter) * lGrid;
