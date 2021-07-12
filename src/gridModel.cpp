@@ -45,6 +45,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 
 const double meanSoftness = 14.81;
 const double stdSoftness = 3.17;
+const double dSoftnessDStrain2 = -478.3815;
 
 class gridModel
 {
@@ -85,8 +86,15 @@ public:
     //In this version of the program, length of a rearrangement in frames is determined from the intensity
     //int rearrangeFrameLength;
 
-    //due to discreteness, the sum over all grid points cos(4theta)/r^2 is not zero. This is the correction.
-    double cos4ThetaCorrection;
+    struct neighborRelease
+    {
+        int x, y;
+        double strainReleaseProbability;
+        neighborRelease(int x, int y, double i) : x(x), y(y), strainReleaseProbability(i)
+        {
+        }
+    };
+    std::vector<neighborRelease> neighborList;
 
     gridModel(int nGrid, double lGrid, int seed) : rEngine(seed),
                                                    eDistribution(0.0, 0.001),
@@ -103,19 +111,20 @@ public:
         movingAverageTarget[1] = 13.3084;
         movingAverageTarget[2] = 14.352;
 
-        //determine cos(4theta) correction
-        double sum = 0.0;
-        for (int i = 0; i < nGridPerSide; i++)
-            for (int j = 0; j < nGridPerSide; j++)
+        neighborList.push_back(neighborRelease(0, 0, 1.0));
+        double sumP = 1.0;
+        for (int i = -10; i < 11; i++)
+            for (int j = -10; j < 11; j++)
             {
-                double dx = (i - bufferCenter) * lGrid;
-                double dy = (j - bufferCenter) * lGrid;
-                double r = std::sqrt(dx * dx + dy * dy);
-                double theta = std::atan2(dy, dx);
-                if (r != 0.0)
-                    sum += std::cos(4 * theta) / r / r;
+                if (i != 0 || j != 0)
+                {
+                    double r = std::sqrt(double(i) * i + j * j) * lGrid;
+                    double p = 0.897 * std::exp(-0.625 * r);
+                    neighborList.push_back(neighborRelease(i, j, p));
+                    sumP += p;
+                }
             }
-        this->cos4ThetaCorrection = (-1.0) * sum / nGridPerSide / nGridPerSide;
+        std::cout << "sum strain release probability=" << sumP << std::endl;
     }
 
     void openNewDumpFile(const std::string &filename)
@@ -210,9 +219,8 @@ public:
     double deviatoricYieldStrain(int i)
     {
         double s = alls[i];
-        auto e = alle[i];
 
-        double mu = s - 478.3815 * e.Modulus2();
+        double mu = s;
         double sigma = 3.0;
 
         double yieldStress = mu /*+ std::sqrt(2.0) * sigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1)*/;
@@ -581,15 +589,21 @@ public:
 #pragma omp parallel for schedule(static)
         for (int i = 0; i < nSite; i++)
         {
-            double oldStrain = this->alle[i].x[0];
-            double newStrain = oldStrain + strain;
-            //this->alls[i] -= 478.3815 * (newStrain * newStrain - oldStrain * oldStrain);
-
-            this->alle[i].x[0] = newStrain;
+            double olde2 = this->alle[i].Modulus2();
+            this->alle[i].x[0] += strain;
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
+            this->alls[i] += (this->alle[i].Modulus2() - olde2) * dSoftnessDStrain2;
         }
     }
+
+    double rearrangingIncentive(int i)
+    {
+        double yieldStrain = deviatoricYieldStrain(i);
+        auto e = alle[i];
+        return e.Modulus2() - yieldStrain * yieldStrain;
+    }
+
     bool avalanche(std::string outputPrefix = "")
     {
         bool avalancheHappened = false;
@@ -622,6 +636,11 @@ public:
         //if rearranging, the value is how much strain is redistributed per frame
         std::vector<GeometryVector> rearrangingIntensity(nSite, GeometryVector(0.0, 0.0));
         std::vector<int> rearrangeFrameLength(nSite, 0);
+        //for strain release caused by a block itself yielding, set this to 1, and softness of all other sites will be updated
+        //if strain release is just because a neighbor is rearranging, leave this as 0, softness update will be disabled
+        std::vector<char> updateSoftness(nSite, 0);
+
+        std::uniform_real_distribution<double> uDistribution(0.0, 1.0);
 
 #pragma omp parallel
         {
@@ -635,15 +654,53 @@ public:
             {
 #pragma omp single
                 {
+                    //if a site is rearranging, do nothing
+                    //otherwise, find out the site with the largest incentive, let it rearrange
+                    int toRearrange = -1;
+                    double maxIncentive = 0.0;
                     for (int i = 0; i < nSite; i++)
-                        if (rearrangingStep[i] == 0 && startRearranging(i))
+                        if (rearrangingStep[i] > 0)
                         {
-                            rearrangingStep[i] = 1;
-                            GeometryVector residual(this->residualStrainDistribution(this->rEngine) * alle[i].x[0], this->residualStrainDistribution(this->rEngine) * alle[i].x[1]);
-                            GeometryVector totalIntensity = (alle[i] - residual);
-                            rearrangeFrameLength[i] = std::max(int(std::ceil(std::sqrt(totalIntensity.Modulus2()) / 0.1)), 1);
-                            rearrangingIntensity[i] = totalIntensity * (1.0 / rearrangeFrameLength[i]);
+                            toRearrange = -1;
+                            break;
                         }
+                        else
+                        {
+                            double incentive = rearrangingIncentive(i);
+                            if (incentive > maxIncentive)
+                            {
+                                maxIncentive = incentive;
+                                toRearrange = i;
+                            }
+                        }
+                    if (toRearrange >= 0)
+                    {
+                        updateSoftness[toRearrange] = 1;
+                        avalancheHappened = true;
+                        for (auto n : neighborList)
+                        {
+                            if (uDistribution(rEngine) < n.strainReleaseProbability)
+                            {
+                                int x = toRearrange % nGridPerSide + n.x;
+                                while (x < 0)
+                                    x += nGridPerSide;
+                                while (x >= nGridPerSide)
+                                    x -= nGridPerSide;
+                                int y = toRearrange / nGridPerSide + n.y;
+                                while (y < 0)
+                                    y += nGridPerSide;
+                                while (y >= nGridPerSide)
+                                    y -= nGridPerSide;
+                                int toRearrange2 = y * nGridPerSide + x;
+
+                                rearrangingStep[toRearrange2] = 1;
+                                GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
+                                GeometryVector totalIntensity = alle[toRearrange2] - residual;
+                                rearrangeFrameLength[toRearrange2] = 1;
+                                rearrangingIntensity[toRearrange2] = totalIntensity * (1.0 / rearrangeFrameLength[toRearrange2]);
+                            }
+                        }
+                    }
                 }
 
 #pragma omp barrier
@@ -673,6 +730,7 @@ public:
                                     yInBuffer -= nGridPerSide;
                                 //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
                                 GeometryVector &e = alle[x * nGridPerSide + y];
+                                double olde2 = e.Modulus2();
 
                                 for (int j = 0; j < MaxDimension; j++)
                                 {
@@ -680,12 +738,15 @@ public:
                                     e.AddFrom(rearrangingIntensity[i].x[j] * de);
                                 }
 
-                                //softness has a restoring force
-                                double dx = (xInBuffer - bufferCenter) * lGrid;
-                                double dy = (yInBuffer - bufferCenter) * lGrid;
-                                double r = std::sqrt(dx * dx + dy * dy);
-                                double ds = dsFromRearranger(dx, dy, r, alls[x * nGridPerSide + y], rearrangingIntensity[i], threadEngine);
-                                alls[x * nGridPerSide + y] += ds;
+                                if (updateSoftness[i])
+                                {
+                                    double dx = (xInBuffer - bufferCenter) * lGrid;
+                                    double dy = (yInBuffer - bufferCenter) * lGrid;
+                                    double r = std::sqrt(dx * dx + dy * dy);
+                                    double ds = dsFromRearranger(dx, dy, r, alls[x * nGridPerSide + y], rearrangingIntensity[i], threadEngine);
+                                    alls[x * nGridPerSide + y] += ds;
+                                }
+                                alls[x * nGridPerSide + y] += dSoftnessDStrain2 * (e.Modulus2() - olde2);
                             }
                         }
                         numRearrange++;
@@ -705,7 +766,7 @@ public:
                                 rearrangingIntensity[i] = GeometryVector(0.0, 0.0);
                                 rearrangingStep[i] = 0;
                                 hasRearranged[i] = 1;
-                                alls[i] = sDistribution(rEngine);
+                                updateSoftness[i] = 0;
                                 yieldStrainPx[i] = PxDistribution(rEngine);
                             }
                         }
@@ -714,7 +775,7 @@ public:
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-                        std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
+                        //std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
 
                         if (outputPrefix != std::string(""))
                         {
@@ -731,10 +792,12 @@ public:
                             countp.push_back(::MaxDimension);
                             intensityVar.putVar(startp, countp, rearrangingIntensity.data());
                         }
+                        nStep++;
                     }
                 }
             }
         }
+        std::cout << "steps in this avalanche=" << nStep << std::endl;
         return avalancheHappened;
     }
 };
