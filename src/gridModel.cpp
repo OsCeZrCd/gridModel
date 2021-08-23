@@ -359,7 +359,7 @@ public:
         }
 
         double harmonicDiffusion = 0.0;
-        if (r < 20)
+        if (r < 10)
         {
             double stddev = std::sqrt(eta * (2.0 - eta)) * stdSoftness;
             std::normal_distribution<double> noiseDistribution(0.0, stddev);
