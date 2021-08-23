@@ -40,7 +40,6 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
-const double angularContributionCoefficient = 10.0;
 const double meanSoftness = -1.882;
 const double stdSoftness = 2.0;
 const double dSoftnessDStrain2 = 101.3;
@@ -342,8 +341,8 @@ public:
             */
 
             //contribution from volumetric strain
-            meanContribution -= angularContributionCoefficient * 1.6 * rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
-            meanContribution -= angularContributionCoefficient * 1.6 * rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
+            meanContribution -= 18.3 * rearrangingIntensity.x[0] / r / r * std::sin(2.0 * std::atan2(dy, dx));
+            meanContribution -= 18.3 * rearrangingIntensity.x[1] / r / r * std::cos(2.0 * std::atan2(dy, dx));
         }
         meanContribution += intensityModulus * softnessChangeShift + softnessChangeShift2;
 
