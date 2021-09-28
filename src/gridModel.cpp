@@ -40,7 +40,7 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
-const double meanSoftness = -1.882;
+const double meanSoftness = -1.660;
 const double stdSoftness = 2.0;
 const double dSoftnessDStrain2 = 101.3;
 //const double dSoftnessDStrain2 = 0.0;
@@ -157,7 +157,7 @@ public:
         this->initialize();
 
         neighborList.push_back(neighborRelease(0, 0, 1.0));
-        double sumP=1.0;
+        double sumP = 1.0;
         for (int i = -10; i < 11; i++)
             for (int j = -10; j < 11; j++)
             {
@@ -166,10 +166,10 @@ public:
                     double r = std::sqrt(double(i) * i + j * j) * lGrid;
                     double p = 0.897 * std::exp(-0.663 * r);
                     neighborList.push_back(neighborRelease(i, j, p));
-                    sumP+=p;
+                    sumP += p;
                 }
             }
-        std::cout<<"sum strain release probability="<<sumP<<std::endl;
+        std::cout << "sum strain release probability=" << sumP << std::endl;
 
         //calculate softnessChangeShift, which is a background softness change for every block assuming the rearranging intensity is 1.0
         double sumExpectedDs = 0.0;
@@ -718,8 +718,13 @@ public:
                         }
                     if (toRearrange >= 0)
                     {
-                        updateSoftness[toRearrange] = 1;
                         avalancheHappened = true;
+
+                        updateSoftness[toRearrange] = 1;
+                        std::vector<int> toReleaseStrain;
+                        double sumTotalIntensity2 = 0.0;
+
+                        //we call this 'neighborList', but it includes not only neighbors but also rearranger itself
                         for (auto n : neighborList)
                         {
                             if (uDistribution(rEngine) < n.strainReleaseProbability)
@@ -739,9 +744,17 @@ public:
                                 rearrangingStep[toRearrange2] = 1;
                                 GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
                                 GeometryVector totalIntensity = alle[toRearrange2] - residual;
-                                rearrangeFrameLength[toRearrange2] = 1;
-                                rearrangingIntensity[toRearrange2] = totalIntensity * (1.0 / rearrangeFrameLength[toRearrange2]);
+                                rearrangingIntensity[toRearrange2] = totalIntensity;
+                                sumTotalIntensity2 += totalIntensity.Modulus2();
+                                toReleaseStrain.push_back(toRearrange2);
                             }
+                        }
+                        int frameLength = std::max(int(std::ceil(std::sqrt(sumTotalIntensity2) / 0.1)), 1);
+
+                        for (auto i : toReleaseStrain)
+                        {
+                            rearrangingIntensity[i].MultiplyFrom(1.0 / double(frameLength));
+                            rearrangeFrameLength[i] = frameLength;
                         }
                     }
                 }
