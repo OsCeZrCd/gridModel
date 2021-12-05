@@ -38,14 +38,21 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     mglGraph gr;
     gr.SetSize(1600, 1600);
     //gr.Aspect(0.75, 1.0);
-    //gr.Colorbar(">kbcyr");
-    gr.Tile(x, "bckyr");
+    gr.SetRange('z', 0.0, 1.0);
+    //workaround: I wanted kw and range: [0, 1], but I can only get range=[-1, 1], SetRange does not work
+    //so I added something before kw
+    gr.Tile(x, "bkw");
+    //gr.Colorbar(">kw");
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
 const double meanSoftness = 14.81;
 const double stdSoftness = 3.17;
 const double dSoftnessDStrain2 = -478.3815;
+const double restoreRange=30.0;
+const double alpha=0.077909;
+const double beta=-2.5;
+const double emaMeanShift=0.25336/alpha;
 
 class gridModel
 {
@@ -86,6 +93,8 @@ public:
     //In this version of the program, length of a rearrangement in frames is determined from the intensity
     //int rearrangeFrameLength;
 
+    double softnessChangeShift = 0.0;
+
     struct neighborRelease
     {
         int x, y;
@@ -108,8 +117,8 @@ public:
         this->initialize();
 
         //these intial values for the moving average comes from measurements from a run that makes softness restore to global average
-        movingAverageTarget[1] = 13.3084;
-        movingAverageTarget[2] = 14.352;
+        //movingAverageTarget[1] = 13.3084;
+        //movingAverageTarget[2] = 14.352;
 
         neighborList.push_back(neighborRelease(0, 0, 1.0));
         double sumP = 1.0;
@@ -125,6 +134,24 @@ public:
                 }
             }
         std::cout << "sum strain release probability=" << sumP << std::endl;
+
+        //calculate softnessChangeShift, which is a background softness change for every block assuming the rearranging intensity is 1.0
+        double sumExpectedDs = 0.0;
+        for (int i = 0; i < nGridPerSide; i++)
+            for (int j = 0; j < nGridPerSide; j++)
+            {
+                double dx = (i - bufferCenter) * lGrid;
+                double dy = (j - bufferCenter) * lGrid;
+                double r = std::sqrt(dx * dx + dy * dy);
+                if (r < restoreRange)
+                {
+                    double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0);
+                    sumExpectedDs += softnessRestoringCoefficient * emaMeanShift;
+                }
+            }
+        //debug temp
+        std::cout << "sumExpectedDs=" << sumExpectedDs << std::endl;
+        softnessChangeShift = ((-1.0) * sumExpectedDs) / nGridPerSide / nGridPerSide;
     }
 
     void openNewDumpFile(const std::string &filename)
@@ -256,7 +283,6 @@ public:
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
         const double angularContributionCoefficient = 5.37 / 2.0;
-        const double emaMeanShift = 0.0;
 
         double meanContribution = 0.0;
         double restore = 0.0;
@@ -269,21 +295,13 @@ public:
             double theta = std::atan2(dy, dx);
             meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * 11.506 * std::sin(2 * theta) / r / r;
             meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * 11.506 * std::cos(2 * theta) / r / r;
-
-            //meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * -9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
-            //meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * 9.845 * (std::cos(4 * theta) / r / r + cos4ThetaCorrection);
-
-            //if (r < 10.0)
-            //    meanContribution += 0.45865 * (intensityModulus / 0.1) * std::pow(r, -3.0642);
         }
+        meanContribution += intensityModulus * softnessChangeShift;
 
-        if (r < 30.0)
+        if (r < restoreRange)
         {
             //this is eta from measured stddev of dS
-            double vds = 0.87573 * (intensityModulus / 0.1) * ((r > 0) ? std::pow(r, -1.971) : 1.0);
-            double softnessRestoringCoefficient = 1 - std::sqrt(1 - vds / stdSoftness);
-
-            //double softnessRestoringCoefficient = 2e-2;
+            double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0);
 
             int index = std::floor(r);
             restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
@@ -293,12 +311,6 @@ public:
             std::normal_distribution<double> noiseDistribution(0.0, stddev);
             harmonicDiffusion = noiseDistribution(engine);
         }
-
-        // if (r > 0 && r < 20)
-        // {
-        //     std::normal_distribution<double> noiseDistribution(0.0, 0.63 * std::pow(r, -1.55));
-        //     harmonicDiffusion = noiseDistribution(engine);
-        // }
 
         return meanContribution + restore + harmonicDiffusion;
     }
@@ -634,7 +646,8 @@ public:
         }
 
         //if rearranging, the value is how much strain is redistributed per frame
-        std::vector<GeometryVector> rearrangingIntensity(nSite, GeometryVector(0.0, 0.0));
+        std::vector<GeometryVector> rearrangingIntensity;
+        rearrangingIntensity.resize(nSite);
         std::vector<int> rearrangeFrameLength(nSite, 0);
         //for strain release caused by a block itself yielding, set this to 1, and softness of all other sites will be updated
         //if strain release is just because a neighbor is rearranging, leave this as 0, softness update will be disabled
@@ -675,8 +688,13 @@ public:
                         }
                     if (toRearrange >= 0)
                     {
-                        updateSoftness[toRearrange] = 1;
                         avalancheHappened = true;
+
+                        updateSoftness[toRearrange] = 1;
+                        std::vector<int> toReleaseStrain;
+                        double sumTotalIntensity2 = 0.0;
+
+                        //we call this 'neighborList', but it includes not only neighbors but also rearranger itself
                         for (auto n : neighborList)
                         {
                             if (uDistribution(rEngine) < n.strainReleaseProbability)
@@ -696,9 +714,17 @@ public:
                                 rearrangingStep[toRearrange2] = 1;
                                 GeometryVector residual(this->residualStrainDistribution(this->rEngine), this->residualStrainDistribution(this->rEngine));
                                 GeometryVector totalIntensity = alle[toRearrange2] - residual;
-                                rearrangeFrameLength[toRearrange2] = 1;
-                                rearrangingIntensity[toRearrange2] = totalIntensity * (1.0 / rearrangeFrameLength[toRearrange2]);
+                                rearrangingIntensity[toRearrange2] = totalIntensity;
+                                sumTotalIntensity2 += totalIntensity.Modulus2();
+                                toReleaseStrain.push_back(toRearrange2);
                             }
+                        }
+                        int frameLength = std::max(int(std::ceil(std::sqrt(sumTotalIntensity2) / 0.1)), 1);
+
+                        for (auto i : toReleaseStrain)
+                        {
+                            rearrangingIntensity[i].MultiplyFrom(1.0 / double(frameLength));
+                            rearrangeFrameLength[i] = frameLength;
                         }
                     }
                 }
@@ -754,6 +780,32 @@ public:
                 }
 #pragma omp single
                 {
+                    if (numRearrange > 0)
+                    {
+                        avalancheHappened = true;
+                        //std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
+
+                        if (outputPrefix != std::string(""))
+                        {
+                            std::stringstream ss;
+                            ss << outputPrefix << "_step_" << nStep;
+                            plot(this->rearrangingStep, nGridPerSide, ss.str());
+                            int framesAlreadyWritten = intensityVar.getDim(0).getSize();
+                            int dim = 2;
+                            std::vector<size_t> startp, countp;
+                            startp.push_back(framesAlreadyWritten); //start from the end of the previous frame
+                            for (int i = 0; i < dim; i++)
+                                startp.push_back(0);
+                            startp.push_back(0);
+                            countp.push_back(1); //write one frame
+                            for (int i = 0; i < dim; i++)
+                                countp.push_back(nGridPerSide);
+                            countp.push_back(::MaxDimension);
+                            intensityVar.putVar(startp, countp, rearrangingIntensity.data());
+                        }
+                        nStep++;
+                    }
+
                     for (int i = 0; i < nSite; i++)
                     {
                         if (rearrangingStep[i] > 0)
@@ -771,31 +823,14 @@ public:
                             }
                         }
                     }
-
-                    if (numRearrange > 0)
-                    {
-                        avalancheHappened = true;
-                        //std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
-
-                        if (outputPrefix != std::string(""))
-                        {
-                            int framesAlreadyWritten = intensityVar.getDim(0).getSize();
-                            int dim = 2;
-                            std::vector<size_t> startp, countp;
-                            startp.push_back(framesAlreadyWritten); //start from the end of the previous frame
-                            for (int i = 0; i < dim; i++)
-                                startp.push_back(0);
-                            startp.push_back(0);
-                            countp.push_back(1); //write one frame
-                            for (int i = 0; i < dim; i++)
-                                countp.push_back(nGridPerSide);
-                            countp.push_back(::MaxDimension);
-                            intensityVar.putVar(startp, countp, rearrangingIntensity.data());
-                        }
-                        nStep++;
-                    }
                 }
             }
+        }
+        if (outputPrefix != std::string(""))
+        {
+            std::stringstream ss;
+            ss << outputPrefix;
+            plot(this->hasRearranged, nGridPerSide, ss.str());
         }
         std::cout << "steps in this avalanche=" << nStep << std::endl;
         return avalancheHappened;
@@ -833,7 +868,8 @@ int main()
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    while (totalExternalStrain < 0.15)
+    double strainOverStep = 1e-10;
+    while (totalExternalStrain < 0.1)
     {
         double strain = std::min(model.minimumXyStrainDistanceToRarranging() + 1e-10, 1e-3);
         model.shear(strain);
