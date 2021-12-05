@@ -35,8 +35,11 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     mglGraph gr;
     gr.SetSize(1600, 1600);
     //gr.Aspect(0.75, 1.0);
-    //gr.Colorbar(">kbcyr");
-    gr.Tile(x, "bckyr");
+    gr.SetRange('z', 0.0, 1.0);
+    //workaround: I wanted kw and range: [0, 1], but I can only get range=[-1, 1], SetRange does not work
+    //so I added something before kw
+    gr.Tile(x, "bkw");
+    //gr.Colorbar(">kw");
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
@@ -810,6 +813,20 @@ public:
                 }
 #pragma omp single
                 {
+                    if (numRearrange > 0)
+                    {
+                        avalancheHappened = true;
+                        //std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
+
+                        if (outputPrefix != std::string(""))
+                        {
+                            std::stringstream ss;
+                            ss << outputPrefix << "_step_" << nStep;
+                            plot(this->rearrangingStep, nGridPerSide, ss.str());
+                        }
+                        nStep++;
+                    }
+
                     for (int i = 0; i < nSite; i++)
                     {
                         if (rearrangingStep[i] > 0)
@@ -826,22 +843,14 @@ public:
                             }
                         }
                     }
-
-                    if (numRearrange > 0)
-                    {
-                        avalancheHappened = true;
-                        //std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
-
-                        if (outputPrefix != std::string(""))
-                        {
-                            std::stringstream ss;
-                            ss << outputPrefix << "_step_" << nStep;
-                            plot(this->rearrangingStep, nGridPerSide, ss.str());
-                        }
-                        nStep++;
-                    }
                 }
             }
+        }
+        if (outputPrefix != std::string(""))
+        {
+            std::stringstream ss;
+            ss << outputPrefix;
+            plot(this->hasRearranged, nGridPerSide, ss.str());
         }
         std::cout << "steps in this avalanche=" << nStep << std::endl;
         return avalancheHappened;
@@ -881,7 +890,7 @@ int main()
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
     double strainOverStep = 1e-10;
-    while (totalExternalStrain < 0.2)
+    while (totalExternalStrain < 0.1)
     {
         double strain = model.minimumXyStrainDistanceToRarranging() + strainOverStep;
         model.shear(strain);
