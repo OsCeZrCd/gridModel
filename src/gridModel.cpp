@@ -677,6 +677,29 @@ public:
         bool avalancheHappened = false;
         int nSite = nGridPerSide * nGridPerSide;
         int nStep = 0;
+        netCDF::NcFile avalancheProcessDumpFile;
+        netCDF::NcVar intensityVar;
+
+        if (outputPrefix != std::string(""))
+        {
+            avalancheProcessDumpFile.open(outputPrefix, netCDF::NcFile::replace);
+            int dim = 2;
+            std::vector<netCDF::NcDim> strainDims;
+
+            netCDF::NcDim framedim = avalancheProcessDumpFile.addDim("frames");
+            strainDims.push_back(framedim);
+            for (int i = 0; i < dim; i++)
+            {
+                std::stringstream ss;
+                ss << "dim_" << i;
+                netCDF::NcDim temp = avalancheProcessDumpFile.addDim(ss.str(), nGridPerSide);
+                strainDims.push_back(temp);
+            }
+            strainDims.push_back(avalancheProcessDumpFile.addDim("strainComponents", ::MaxDimension));
+
+            intensityVar = avalancheProcessDumpFile.addVar("rearrangingIntensity", netCDF::ncDouble, strainDims);
+            intensityVar.setCompression(true, true, 9);
+        }
 
         //if rearranging, the value is how much strain is redistributed per frame
         std::vector<GeometryVector> rearrangingIntensity;
@@ -823,6 +846,19 @@ public:
                             std::stringstream ss;
                             ss << outputPrefix << "_step_" << nStep;
                             plot(this->rearrangingStep, nGridPerSide, ss.str());
+                            int framesAlreadyWritten = intensityVar.getDim(0).getSize();
+                            int dim = 2;
+                            std::vector<size_t> startp, countp;
+                            startp.push_back(framesAlreadyWritten); //start from the end of the previous frame
+                            for (int i = 0; i < dim; i++)
+                                startp.push_back(0);
+                            startp.push_back(0);
+                            countp.push_back(1); //write one frame
+                            for (int i = 0; i < dim; i++)
+                                countp.push_back(nGridPerSide);
+                            countp.push_back(::MaxDimension);
+                            intensityVar.putVar(startp, countp, rearrangingIntensity.data());
+
                         }
                         nStep++;
                     }
@@ -836,6 +872,7 @@ public:
                             if (rearrangingStep[i] > rearrangeFrameLength[i])
                             {
                                 rearrangeFrameLength[i] = 0;
+                                rearrangingIntensity[i] = GeometryVector(0.0, 0.0);
                                 rearrangingStep[i] = 0;
                                 hasRearranged[i] = 1;
                                 updateSoftness[i] = 0;
