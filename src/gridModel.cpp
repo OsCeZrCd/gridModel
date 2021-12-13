@@ -49,6 +49,12 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
 //T=0.025
 const double meanSoftness = 14.81;
 const double stdSoftness = 3.17;
+//T=0.05
+//const double meanSoftness = 14.26;
+//const double stdSoftness = 3.51;
+//T=0.1
+//const double meanSoftness = 12.31;
+//const double stdSoftness = 4.14;
 //T=0.2
 //const double meanSoftness = 10.55;
 //const double stdSoftness = 4.43;
