@@ -46,11 +46,16 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
+//T=0.025
 const double meanSoftness = 14.81;
 const double stdSoftness = 3.17;
+//T=0.2
+//const double meanSoftness = 10.55;
+//const double stdSoftness = 4.43;
+
 const double dSoftnessDStrain2 = -478.3815;
 const double restoreRange=30.0;
-const double alpha=0.077909;
+const double alpha=0.77909;
 const double beta=-2.5;
 const double emaMeanShift=0.25336/alpha;
 
@@ -304,7 +309,7 @@ public:
             double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0);
 
             int index = std::floor(r);
-            restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
+            restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s) * intensityModulus;
             movingAverageTarget[index] = 0.99 * movingAverageTarget[index] + 0.01 * s;
 
             double stddev = std::sqrt(softnessRestoringCoefficient * (2.0 - softnessRestoringCoefficient)) * stdSoftness;
