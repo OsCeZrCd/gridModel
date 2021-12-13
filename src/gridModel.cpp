@@ -312,10 +312,10 @@ public:
         if (r < restoreRange)
         {
             //this is eta from measured stddev of dS
-            double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0);
+            double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0) * intensityModulus;
 
             int index = std::floor(r);
-            restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s) * intensityModulus;
+            restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
             movingAverageTarget[index] = 0.99 * movingAverageTarget[index] + 0.01 * s;
 
             double stddev = std::sqrt(softnessRestoringCoefficient * (2.0 - softnessRestoringCoefficient)) * stdSoftness;
