@@ -11,6 +11,35 @@
 #include <boost/math/special_functions/erf.hpp>
 
 const double modulus = 89; //measured by dividing mean yield stress with mean yield strain
+const double gridSideLength=1.0;
+const double maxGlobalStrain=0.1;
+
+//T=0.025
+const double meanSoftness = 14.81;
+const double stdSoftness = 3.17;
+const double d2minDecay = 0.612;
+const int nGridPerSide = 100;
+//T=0.05
+//const double meanSoftness = 14.26;
+//const double stdSoftness = 3.51;
+//T=0.1
+//const double meanSoftness = 12.31;
+//const double stdSoftness = 4.14;
+//const double d2minDecay = 0.554;
+//const int nGridPerSide = 253;
+//T=0.2
+//const double meanSoftness = 10.55;
+//const double stdSoftness = 4.43;
+//const double d2minDecay = 0.533;
+//const int nGridPerSide = 253;
+
+const double dSoftnessDStrain2 = -411;//average of T=0.025, 0.1, and 0.2
+const double cos2ThetaCoefficientPerRearrangingIntensity = 29.6;//average of T=0.025, 0.1, and 0.2
+const double restoreRange=30.0;
+const double alpha=0.77909;
+const double beta=-2.5;
+const double emaMeanShift=0.25336/alpha;
+
 
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
@@ -45,25 +74,6 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
     //gr.Colorbar(">kw");
     gr.WritePNG((file + std::string(".png")).c_str());
 }
-
-//T=0.025
-const double meanSoftness = 14.81;
-const double stdSoftness = 3.17;
-//T=0.05
-//const double meanSoftness = 14.26;
-//const double stdSoftness = 3.51;
-//T=0.1
-//const double meanSoftness = 12.31;
-//const double stdSoftness = 4.14;
-//T=0.2
-//const double meanSoftness = 10.55;
-//const double stdSoftness = 4.43;
-
-const double dSoftnessDStrain2 = -478.3815;
-const double restoreRange=30.0;
-const double alpha=0.77909;
-const double beta=-2.5;
-const double emaMeanShift=0.25336/alpha;
 
 class gridModel
 {
@@ -121,7 +131,7 @@ public:
                                                    residualStrainDistribution(-0.0, 0.0),
                                                    sDistribution(meanSoftness, stdSoftness),
                                                    nGridPerSide(nGrid), lGrid(lGrid),
-                                                   movingAverageTarget(30, meanSoftness)
+                                                   movingAverageTarget(std::ceil(restoreRange), meanSoftness)
     {
         this->allocate();
         this->getBuffer();
@@ -139,7 +149,7 @@ public:
                 if (i != 0 || j != 0)
                 {
                     double r = std::sqrt(double(i) * i + j * j) * lGrid;
-                    double p = 0.897 * std::exp(-0.625 * r);
+                    double p = std::exp((-1)* d2minDecay * r);
                     neighborList.push_back(neighborRelease(i, j, p));
                     sumP += p;
                 }
@@ -293,7 +303,6 @@ public:
 
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector &rearrangingIntensity, std::mt19937 &engine)
     {
-        const double angularContributionCoefficient = 5.37 / 2.0;
 
         double meanContribution = 0.0;
         double restore = 0.0;
@@ -304,8 +313,8 @@ public:
         if (r != 0.0)
         {
             double theta = std::atan2(dy, dx);
-            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[0] * 11.506 * std::sin(2 * theta) / r / r;
-            meanContribution += angularContributionCoefficient * rearrangingIntensity.x[1] * 11.506 * std::cos(2 * theta) / r / r;
+            meanContribution += cos2ThetaCoefficientPerRearrangingIntensity * rearrangingIntensity.x[0] * std::sin(2 * theta) / r / r;
+            meanContribution += cos2ThetaCoefficientPerRearrangingIntensity * rearrangingIntensity.x[1] * std::cos(2 * theta) / r / r;
         }
         meanContribution += intensityModulus * softnessChangeShift;
 
@@ -861,10 +870,9 @@ int main()
 
     const std::string ncFileName = "dump.nc";
 
-    const int nGridPerSide = 100;
     int seed;
     std::cin >> seed;
-    gridModel model(nGridPerSide, 1.0, seed);
+    gridModel model(nGridPerSide, gridSideLength, seed);
     if (fileExists(ncFileName))
     {
         model.initializeFromDumpFile(ncFileName);
@@ -879,8 +887,7 @@ int main()
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    double strainOverStep = 1e-10;
-    while (totalExternalStrain < 0.1)
+    while (totalExternalStrain < maxGlobalStrain)
     {
         double strain = std::min(model.minimumXyStrainDistanceToRarranging() + 1e-10, 1e-3);
         model.shear(strain);
