@@ -858,7 +858,6 @@ public:
                                 countp.push_back(nGridPerSide);
                             countp.push_back(::MaxDimension);
                             intensityVar.putVar(startp, countp, rearrangingIntensity.data());
-
                         }
                         nStep++;
                     }
@@ -907,10 +906,11 @@ int main()
 
     const std::string ncFileName = "dump.nc";
 
-    const int nGridPerSide = 316;
+    int nGridPerSide;
     int seed, dumpLevel;
     double emaMeanShift;
-    std::cin >> seed >> dumpLevel >> emaMeanShift;
+    double maxExternalStrain;
+    std::cin >> seed >> dumpLevel >> emaMeanShift >> nGridPerSide >> maxExternalStrain;
     gridModel model(nGridPerSide, 1.0, seed, emaMeanShift);
     if (fileExists(ncFileName))
     {
@@ -927,17 +927,21 @@ int main()
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
     double strainOverStep = 1e-10;
-    while (totalExternalStrain < 0.1)
+    while (totalExternalStrain < maxExternalStrain)
     {
         double strain = model.minimumXyStrainDistanceToRarranging() + strainOverStep;
         model.shear(strain);
         totalExternalStrain += strain;
 
-        auto outputStrainFunc = [&]() -> void {
-            double sum = 0.0;
+        auto outputStrainFunc = [&]() -> void
+        {
+            double sum = 0.0, sum2 = 0.0;
             for (auto s : model.alle)
+            {
                 sum += s.x[0];
-            strainFile << totalExternalStrain << ' ' << sum / model.alle.size() << std::endl;
+                sum2 += s.x[0] * s.x[0];
+            }
+            strainFile << totalExternalStrain << ' ' << sum / model.alle.size() << ' ' << sum2 / model.alle.size() << std::endl;
         };
         outputStrainFunc();
 
