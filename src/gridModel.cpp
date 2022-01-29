@@ -2,6 +2,7 @@
 #include <vector>
 #include <random>
 #include <cmath>
+#include <iomanip>
 
 #include "GeometryVector.h"
 #include "kiss_fft.h"
@@ -925,6 +926,7 @@ int main()
 
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
+    strainFile<<std::setprecision(9);
     double totalExternalStrain = 0.0;
     double strainOverStep = 1e-10;
     while (totalExternalStrain < maxExternalStrain)
