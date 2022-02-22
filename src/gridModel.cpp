@@ -17,16 +17,19 @@ const double maxGlobalStrain=0.1;
 //T=0.025
  const double meanSoftness = 14.82;
  const double stdSoftness = 2.28;
+ const double yieldStressSigma = 2.20;
  const double d2minDecay = 0.612;
  const int nGridPerSide = 100;
 //T=0.1
 //const double meanSoftness = 13.87;
 //const double stdSoftness = 3.18;
+//const double yieldStressSigma = 2.65;
 //const double d2minDecay = 0.554;
 //const int nGridPerSide = 253;
 //T=0.2
 //const double meanSoftness = 12.09;
 //const double stdSoftness = 3.18;
+//const double yieldStressSigma = 3.08;
 //const double d2minDecay = 0.533;
 //const int nGridPerSide = 253;
 
@@ -266,9 +269,8 @@ public:
         double s = alls[i];
 
         double mu = s;
-        double sigma = 3.0;
 
-        double yieldStress = mu /*+ std::sqrt(2.0) * sigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1)*/;
+        double yieldStress = mu + std::sqrt(2.0) * yieldStressSigma * boost::math::erf_inv(2 * yieldStrainPx[i] - 1);
         if (yieldStress < 1.0)
             yieldStress = 1.0;
         double yieldStrain = yieldStress / modulus;
