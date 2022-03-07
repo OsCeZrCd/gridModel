@@ -16,22 +16,25 @@ const double maxGlobalStrain=0.1;
 
 //T=0.025
  const double meanSoftness = 14.82;
- const double stdSoftness = 2.28;
- const double yieldStressSigma = 2.20;
+ const double stdSoftness = 3.11;
+ const double yieldStressSigma = 0.0;
  const double d2minDecay = 0.612;
  const int nGridPerSide = 100;
+ const double dsCenter=0.0;
 //T=0.1
 //const double meanSoftness = 13.87;
-//const double stdSoftness = 3.18;
-//const double yieldStressSigma = 2.65;
+//const double stdSoftness = 4.35;
+//const double yieldStressSigma = 0.0;
 //const double d2minDecay = 0.554;
 //const int nGridPerSide = 253;
+//const double dsCenter=0.0;
 //T=0.2
 //const double meanSoftness = 12.09;
-//const double stdSoftness = 3.18;
-//const double yieldStressSigma = 3.08;
+//const double stdSoftness = 4.49;
+//const double yieldStressSigma = 0.0;
 //const double d2minDecay = 0.533;
 //const int nGridPerSide = 253;
+//const double dsCenter=0.0;
 
 const double dSoftnessDStrain2 = -411;//average of T=0.025, 0.1, and 0.2
 const double cos2ThetaCoefficientPerRearrangingIntensity = 29.6;//average of T=0.025, 0.1, and 0.2
@@ -158,6 +161,7 @@ public:
 
         //calculate softnessChangeShift, which is a background softness change for every block assuming the rearranging intensity is 1.0
         double sumExpectedDs = 0.0;
+        sumExpectedDs+=dsCenter;
         for (int i = 0; i < nGridPerSide; i++)
             for (int j = 0; j < nGridPerSide; j++)
             {
@@ -315,6 +319,9 @@ public:
             meanContribution += cos2ThetaCoefficientPerRearrangingIntensity * rearrangingIntensity.x[0] * std::sin(2 * theta) / r / r;
             meanContribution += cos2ThetaCoefficientPerRearrangingIntensity * rearrangingIntensity.x[1] * std::cos(2 * theta) / r / r;
         }
+        else
+            meanContribution+=dsCenter;
+        
         meanContribution += intensityModulus * softnessChangeShift;
 
         if (r < restoreRange)
