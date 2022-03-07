@@ -10,39 +10,38 @@
 #include <netcdf>
 #include <boost/math/special_functions/erf.hpp>
 
-const double modulus = 89; //measured by dividing mean yield stress with mean yield strain
-const double gridSideLength=1.0;
-const double maxGlobalStrain=0.1;
+const double modulus = 89; // measured by dividing mean yield stress with mean yield strain
+const double gridSideLength = 1.0;
+const double maxGlobalStrain = 0.1;
 
-//T=0.025
- const double meanSoftness = 14.82;
- const double stdSoftness = 3.11;
- const double yieldStressSigma = 0.0;
- const double d2minDecay = 0.612;
- const int nGridPerSide = 100;
- const double dsCenter=0.0;
-//T=0.1
-//const double meanSoftness = 13.87;
-//const double stdSoftness = 4.35;
-//const double yieldStressSigma = 0.0;
-//const double d2minDecay = 0.554;
-//const int nGridPerSide = 253;
-//const double dsCenter=0.0;
-//T=0.2
-//const double meanSoftness = 12.09;
-//const double stdSoftness = 4.49;
-//const double yieldStressSigma = 0.0;
-//const double d2minDecay = 0.533;
-//const int nGridPerSide = 253;
-//const double dsCenter=0.0;
+// T=0.025
+const double meanSoftness = 14.82;
+const double stdSoftness = 3.11;
+const double yieldStressSigma = 0.0;
+const double d2minDecay = 0.612;
+const int nGridPerSide = 100;
+const double dsCenter = 0.0;
+// T=0.1
+// const double meanSoftness = 13.87;
+// const double stdSoftness = 4.35;
+// const double yieldStressSigma = 0.0;
+// const double d2minDecay = 0.554;
+// const int nGridPerSide = 253;
+// const double dsCenter=0.0;
+// T=0.2
+// const double meanSoftness = 12.09;
+// const double stdSoftness = 4.49;
+// const double yieldStressSigma = 0.0;
+// const double d2minDecay = 0.533;
+// const int nGridPerSide = 253;
+// const double dsCenter = 0.0;
 
-const double dSoftnessDStrain2 = -411;//average of T=0.025, 0.1, and 0.2
-const double cos2ThetaCoefficientPerRearrangingIntensity = 29.6;//average of T=0.025, 0.1, and 0.2
-const double restoreRange=30.0;
-const double alpha=0.77909;
-const double beta=-2.5;
-const double emaMeanShift=0.25336/alpha;
-
+const double dSoftnessDStrain2 = -411;                           // average of T=0.025, 0.1, and 0.2
+const double cos2ThetaCoefficientPerRearrangingIntensity = 29.6; // average of T=0.025, 0.1, and 0.2
+const double restoreRange = 30.0;
+const double alpha = 0.77909;
+const double beta = -2.5;
+const double emaMeanShift = 0.25336 / alpha;
 
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
@@ -65,16 +64,16 @@ void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
                 a = std::max(0.5, a);
             x.SetVal(a, i, j);
         }
-        //std::cout<<std::endl;
+        // std::cout<<std::endl;
     }
     mglGraph gr;
     gr.SetSize(1600, 1600);
-    //gr.Aspect(0.75, 1.0);
+    // gr.Aspect(0.75, 1.0);
     gr.SetRange('z', 0.0, 1.0);
-    //workaround: I wanted kw and range: [0, 1], but I can only get range=[-1, 1], SetRange does not work
-    //so I added something before kw
+    // workaround: I wanted kw and range: [0, 1], but I can only get range=[-1, 1], SetRange does not work
+    // so I added something before kw
     gr.Tile(x, "bkw");
-    //gr.Colorbar(">kw");
+    // gr.Colorbar(">kw");
     gr.WritePNG((file + std::string(".png")).c_str());
 }
 
@@ -87,35 +86,35 @@ public:
 
     std::vector<double> alls;
 
-    //e is elastic strain
-    //dEBuffer[0] and [1] correspond to
-    // [0] response from converting an xy elastic strain to plastic strain
-    // [1] response from converting an xx deviatoric elastic strain to plastic strain
-    std::vector<GeometryVector> dEBuffer[::MaxDimension], alle;
+    // e is elastic strain
+    // dEBuffer[0] and [1] correspond to
+    //  [0] response from converting an xy elastic strain to plastic strain
+    //  [1] response from converting an xx deviatoric elastic strain to plastic strain
+    std::vector<GeometryVector> dEBuffer[::MaxDimension], alle, cumulativePlasticStrain;
 
     std::vector<int> rearrangingStep;
     std::vector<char> hasRearranged;
 
     std::mt19937 rEngine;
-    //distribution of softness after a rearrangement
+    // distribution of softness after a rearrangement
     std::normal_distribution<double> sDistribution;
-    //distribution of strain initially
+    // distribution of strain initially
     std::normal_distribution<double> eDistribution;
-    //distribution of elastic strain after rearrangement
-    //std::normal_distribution<double> residualStrainDistribution;
+    // distribution of elastic strain after rearrangement
+    // std::normal_distribution<double> residualStrainDistribution;
     std::uniform_real_distribution<double> residualStrainDistribution;
 
     std::uniform_real_distribution<double> PxDistribution;
     std::vector<double> yieldStrainPx;
 
     netCDF::NcFile dumpFile;
-    netCDF::NcVar eVar, sVar, hasRearrangedVar;
+    netCDF::NcVar eVar, sVar, hasRearrangedVar, cumulativePlasticStrainVar;
     netCDF::NcVar coeffVar;
 
     std::vector<double> movingAverageTarget;
 
-    //In this version of the program, length of a rearrangement in frames is determined from the intensity
-    //int rearrangeFrameLength;
+    // In this version of the program, length of a rearrangement in frames is determined from the intensity
+    // int rearrangeFrameLength;
 
     double softnessChangeShift = 0.0;
 
@@ -140,9 +139,9 @@ public:
         this->getBuffer();
         this->initialize();
 
-        //these intial values for the moving average comes from measurements from a run that makes softness restore to global average
-        //movingAverageTarget[1] = 13.3084;
-        //movingAverageTarget[2] = 14.352;
+        // these intial values for the moving average comes from measurements from a run that makes softness restore to global average
+        // movingAverageTarget[1] = 13.3084;
+        // movingAverageTarget[2] = 14.352;
 
         neighborList.push_back(neighborRelease(0, 0, 1.0));
         double sumP = 1.0;
@@ -152,16 +151,16 @@ public:
                 if (i != 0 || j != 0)
                 {
                     double r = std::sqrt(double(i) * i + j * j) * lGrid;
-                    double p = std::exp((-1)* d2minDecay * r);
+                    double p = std::exp((-1) * d2minDecay * r);
                     neighborList.push_back(neighborRelease(i, j, p));
                     sumP += p;
                 }
             }
         std::cout << "sum strain release probability=" << sumP << std::endl;
 
-        //calculate softnessChangeShift, which is a background softness change for every block assuming the rearranging intensity is 1.0
+        // calculate softnessChangeShift, which is a background softness change for every block assuming the rearranging intensity is 1.0
         double sumExpectedDs = 0.0;
-        sumExpectedDs+=dsCenter;
+        sumExpectedDs += dsCenter;
         for (int i = 0; i < nGridPerSide; i++)
             for (int j = 0; j < nGridPerSide; j++)
             {
@@ -174,7 +173,7 @@ public:
                     sumExpectedDs += softnessRestoringCoefficient * emaMeanShift;
                 }
             }
-        //debug temp
+        // debug temp
         std::cout << "sumExpectedDs=" << sumExpectedDs << std::endl;
         softnessChangeShift = ((-1.0) * sumExpectedDs) / nGridPerSide / nGridPerSide;
     }
@@ -202,10 +201,12 @@ public:
         sVar = dumpFile.addVar("softness", netCDF::ncDouble, dims);
         hasRearrangedVar = dumpFile.addVar("hasRearranged", netCDF::ncByte, dims);
         coeffVar = dumpFile.addVar("yieldStrainPx", netCDF::ncDouble, dims);
+        cumulativePlasticStrainVar = dumpFile.addVar("cumulativePlasticStrain", netCDF::ncDouble, strainDims);
         eVar.setCompression(true, true, 9);
         sVar.setCompression(true, true, 9);
         hasRearrangedVar.setCompression(true, true, 9);
         coeffVar.setCompression(true, true, 9);
+        cumulativePlasticStrainVar.setCompression(true, true, 9);
     }
     void openExistingDumpFile(const std::string &filename)
     {
@@ -214,20 +215,34 @@ public:
         sVar = dumpFile.getVar("softness");
         hasRearrangedVar = dumpFile.getVar("hasRearranged");
         coeffVar = dumpFile.getVar("yieldStrainPx");
+        cumulativePlasticStrainVar = dumpFile.getVar("cumulativePlasticStrain");
     }
-    void dump(bool writeStrain = false, bool writeSoftness = false, bool writeYieldStrainCoeff = false, bool writeHasRearranged = true)
+    void dump(bool writeStrain = false, bool writeSoftness = false, bool writeYieldStrainCoeff = false, bool writeHasRearranged = true, bool writeCumulativePlasticStrain = true)
     {
         int dim = 2;
 
         int framesAlreadyWritten = eVar.getDim(0).getSize();
-        if (writeStrain)
+        if (writeCumulativePlasticStrain)
         {
             std::vector<size_t> startp, countp;
-            startp.push_back(framesAlreadyWritten); //start from the end of the previous frame
+            startp.push_back(framesAlreadyWritten); // start from the end of the previous frame
             for (int i = 0; i < dim; i++)
                 startp.push_back(0);
             startp.push_back(0);
-            countp.push_back(1); //write one frame
+            countp.push_back(1); // write one frame
+            for (int i = 0; i < dim; i++)
+                countp.push_back(nGridPerSide);
+            countp.push_back(::MaxDimension);
+            cumulativePlasticStrainVar.putVar(startp, countp, cumulativePlasticStrain.data());
+        }
+        if (writeStrain)
+        {
+            std::vector<size_t> startp, countp;
+            startp.push_back(framesAlreadyWritten); // start from the end of the previous frame
+            for (int i = 0; i < dim; i++)
+                startp.push_back(0);
+            startp.push_back(0);
+            countp.push_back(1); // write one frame
             for (int i = 0; i < dim; i++)
                 countp.push_back(nGridPerSide);
             countp.push_back(::MaxDimension);
@@ -320,13 +335,13 @@ public:
             meanContribution += cos2ThetaCoefficientPerRearrangingIntensity * rearrangingIntensity.x[1] * std::cos(2 * theta) / r / r;
         }
         else
-            meanContribution+=dsCenter;
-        
+            meanContribution += dsCenter;
+
         meanContribution += intensityModulus * softnessChangeShift;
 
         if (r < restoreRange)
         {
-            //this is eta from measured stddev of dS
+            // this is eta from measured stddev of dS
             double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0) * intensityModulus;
 
             int index = std::floor(r);
@@ -351,11 +366,11 @@ public:
         double factor[MaxDimension];
 
         {
-            //strain buffer calculated by Fourier transform, xy to xy response
+            // strain buffer calculated by Fourier transform, xy to xy response
             int numPixels = nGridPerSide * nGridPerSide;
             kiss_fft_cpx *inbuf = new kiss_fft_cpx[numPixels];
             kiss_fft_cpx *outbuf = new kiss_fft_cpx[numPixels];
-            //fill in inbuf
+            // fill in inbuf
             for (int i = 0; i < nGridPerSide; i++)
                 for (int j = 0; j < nGridPerSide; j++)
                 {
@@ -374,9 +389,9 @@ public:
             int temp[2] = {nGridPerSide, nGridPerSide};
             kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
             kiss_fftnd(st, inbuf, outbuf);
-            //fill in dEBuffer
-            //the interaction kernel at the rearranging site is -1.0 because
-            //the rearranging site loses all of the redistributed strain
+            // fill in dEBuffer
+            // the interaction kernel at the rearranging site is -1.0 because
+            // the rearranging site loses all of the redistributed strain
             factor[0] = (-1.0 + meanStrainDecrement) / outbuf[0].r;
 
             for (int i = 0; i < nGridPerSide; i++)
@@ -398,11 +413,11 @@ public:
             delete[] inbuf;
         }
         {
-            //strain buffer calculated by Fourier transform, xx to xx response
+            // strain buffer calculated by Fourier transform, xx to xx response
             int numPixels = nGridPerSide * nGridPerSide;
             kiss_fft_cpx *inbuf = new kiss_fft_cpx[numPixels];
             kiss_fft_cpx *outbuf = new kiss_fft_cpx[numPixels];
-            //fill in inbuf
+            // fill in inbuf
             for (int i = 0; i < nGridPerSide; i++)
                 for (int j = 0; j < nGridPerSide; j++)
                 {
@@ -422,9 +437,9 @@ public:
             int temp[2] = {nGridPerSide, nGridPerSide};
             kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
             kiss_fftnd(st, inbuf, outbuf);
-            //fill in dEBuffer
-            //the interaction kernel at the rearranging site is -1.0 because
-            //the rearranging site loses all of the redistributed strain
+            // fill in dEBuffer
+            // the interaction kernel at the rearranging site is -1.0 because
+            // the rearranging site loses all of the redistributed strain
             factor[1] = (-1.0 + meanStrainDecrement) / outbuf[0].r;
 
             for (int i = 0; i < nGridPerSide; i++)
@@ -447,11 +462,11 @@ public:
         }
 
         {
-            //strain buffer calculated by Fourier transform, xy-to-xx and xx-to-xy component, which has the same formula
+            // strain buffer calculated by Fourier transform, xy-to-xx and xx-to-xy component, which has the same formula
             int numPixels = nGridPerSide * nGridPerSide;
             kiss_fft_cpx *inbuf = new kiss_fft_cpx[numPixels];
             kiss_fft_cpx *outbuf = new kiss_fft_cpx[numPixels];
-            //fill in inbuf
+            // fill in inbuf
             for (int i = 0; i < nGridPerSide; i++)
                 for (int j = 0; j < nGridPerSide; j++)
                 {
@@ -470,7 +485,7 @@ public:
             int temp[2] = {nGridPerSide, nGridPerSide};
             kiss_fftnd_cfg st = kiss_fftnd_alloc(temp, 2, true, nullptr, nullptr);
             kiss_fftnd(st, inbuf, outbuf);
-            //fill in dEBuffer
+            // fill in dEBuffer
 
             for (int i = 0; i < nGridPerSide; i++)
                 for (int j = 0; j < nGridPerSide; j++)
@@ -492,47 +507,47 @@ public:
             delete[] inbuf;
         }
 
-        //debug temp
-        // std::cout << std::scientific;
-        // std::cout << factor[0] << " " << factor[1] << std::endl;
-        // std::vector<double> temp(nGridPerSide * nGridPerSide, 0.0);
-        // for (int i = 0; i < nGridPerSide; i++)
-        // {
-        //     for (int j = 0; j < nGridPerSide; j++)
-        //     {
-        //         int index = i * nGridPerSide + j;
-        //         temp[index] = dEBuffer[0][index].x[0];
-        //     }
-        // }
-        // plot(temp, nGridPerSide, "e00");
-        // for (int i = 0; i < nGridPerSide; i++)
-        // {
-        //     for (int j = 0; j < nGridPerSide; j++)
-        //     {
-        //         int index = i * nGridPerSide + j;
-        //         temp[index] = dEBuffer[0][index].x[1];
-        //     }
-        // }
-        // plot(temp, nGridPerSide, "e01");
-        // for (int i = 0; i < nGridPerSide; i++)
-        // {
-        //     for (int j = 0; j < nGridPerSide; j++)
-        //     {
-        //         int index = i * nGridPerSide + j;
-        //         temp[index] = dEBuffer[1][index].x[0];
-        //     }
-        // }
-        // plot(temp, nGridPerSide, "e10");
-        // for (int i = 0; i < nGridPerSide; i++)
-        // {
-        //     for (int j = 0; j < nGridPerSide; j++)
-        //     {
-        //         int index = i * nGridPerSide + j;
-        //         temp[index] = dEBuffer[1][index].x[1];
-        //     }
-        // }
-        // plot(temp, nGridPerSide, "e11");
-        // exit(0);
+        // debug temp
+        //  std::cout << std::scientific;
+        //  std::cout << factor[0] << " " << factor[1] << std::endl;
+        //  std::vector<double> temp(nGridPerSide * nGridPerSide, 0.0);
+        //  for (int i = 0; i < nGridPerSide; i++)
+        //  {
+        //      for (int j = 0; j < nGridPerSide; j++)
+        //      {
+        //          int index = i * nGridPerSide + j;
+        //          temp[index] = dEBuffer[0][index].x[0];
+        //      }
+        //  }
+        //  plot(temp, nGridPerSide, "e00");
+        //  for (int i = 0; i < nGridPerSide; i++)
+        //  {
+        //      for (int j = 0; j < nGridPerSide; j++)
+        //      {
+        //          int index = i * nGridPerSide + j;
+        //          temp[index] = dEBuffer[0][index].x[1];
+        //      }
+        //  }
+        //  plot(temp, nGridPerSide, "e01");
+        //  for (int i = 0; i < nGridPerSide; i++)
+        //  {
+        //      for (int j = 0; j < nGridPerSide; j++)
+        //      {
+        //          int index = i * nGridPerSide + j;
+        //          temp[index] = dEBuffer[1][index].x[0];
+        //      }
+        //  }
+        //  plot(temp, nGridPerSide, "e10");
+        //  for (int i = 0; i < nGridPerSide; i++)
+        //  {
+        //      for (int j = 0; j < nGridPerSide; j++)
+        //      {
+        //          int index = i * nGridPerSide + j;
+        //          temp[index] = dEBuffer[1][index].x[1];
+        //      }
+        //  }
+        //  plot(temp, nGridPerSide, "e11");
+        //  exit(0);
     }
     void allocate()
     {
@@ -542,6 +557,7 @@ public:
         yieldStrainPx.resize(nSite);
         hasRearranged.resize(nSite);
         rearrangingStep.resize(nSite);
+        cumulativePlasticStrain.resize(nSite);
     }
     void initialize()
     {
@@ -554,9 +570,11 @@ public:
             this->yieldStrainPx[i] = this->PxDistribution(this->rEngine);
             this->hasRearranged[i] = 0;
             this->rearrangingStep[i] = 0;
+            cumulativePlasticStrain[i].x[0] = 0.0;
+            cumulativePlasticStrain[i].x[1] = 0.0;
         }
     }
-    //read the dump file, initialize from the last frame where both softness and strain are recorded
+    // read the dump file, initialize from the last frame where both softness and strain are recorded
     void initializeFromDumpFile(const std::string &filename)
     {
         int dim = 2;
@@ -564,21 +582,34 @@ public:
         netCDF::NcVar readEVar = inputFile.getVar("strain");
         netCDF::NcVar readSVar = inputFile.getVar("softness");
         netCDF::NcVar readCVar = inputFile.getVar("yieldStrainPx");
+        netCDF::NcVar readCumuVar = inputFile.getVar("cumulativePlasticStrain");
 
         int framesAlreadyWritten = readEVar.getDim(0).getSize();
         for (int framesToRead = framesAlreadyWritten - 1; framesToRead >= 0; framesToRead--)
         {
             {
                 std::vector<size_t> startp, countp;
-                startp.push_back(framesToRead); //start from the end of the previous frame
+                startp.push_back(framesToRead); // start from the end of the previous frame
                 for (int i = 0; i < dim; i++)
                     startp.push_back(0);
                 startp.push_back(0);
-                countp.push_back(1); //write one frame
+                countp.push_back(1); // write one frame
                 for (int i = 0; i < dim; i++)
                     countp.push_back(nGridPerSide);
                 countp.push_back(::MaxDimension);
                 readEVar.getVar(startp, countp, alle.data());
+            }
+            {
+                std::vector<size_t> startp, countp;
+                startp.push_back(framesToRead); // start from the end of the previous frame
+                for (int i = 0; i < dim; i++)
+                    startp.push_back(0);
+                startp.push_back(0);
+                countp.push_back(1); // write one frame
+                for (int i = 0; i < dim; i++)
+                    countp.push_back(nGridPerSide);
+                countp.push_back(::MaxDimension);
+                readCumuVar.getVar(startp, countp, cumulativePlasticStrain.data());
             }
             {
                 std::vector<size_t> startp, countp;
@@ -601,10 +632,10 @@ public:
                 readCVar.getVar(startp, countp, yieldStrainPx.data());
             }
 
-            //netCDF use a fillValue to indicate non-written value
-            //assume the zeroth element of alle and alls are fillValue
-            //if any of the read data is not fillValue, frame data is valid, mission complete
-            //otherwise, frame data is invalid, see if an earlier frame is valid by letting the loop continue;
+            // netCDF use a fillValue to indicate non-written value
+            // assume the zeroth element of alle and alls are fillValue
+            // if any of the read data is not fillValue, frame data is valid, mission complete
+            // otherwise, frame data is invalid, see if an earlier frame is valid by letting the loop continue;
             double &fillEValue = alle[0].x[0];
             double &fillSValue = alls[0];
             double &fillCValue = yieldStrainPx[0];
@@ -617,10 +648,10 @@ public:
                 }
             }
         }
-        //should not reach here
+        // should not reach here
         std::cerr << "gridModel::initializeFromDumpFile failed : found no frame with both softness and strain recorded.\n";
     }
-    //increase the first component of the strain tensor by the desired amount
+    // increase the first component of the strain tensor by the desired amount
     void shear(double strain = 1e-6)
     {
         int nSite = nGridPerSide * nGridPerSide;
@@ -671,12 +702,12 @@ public:
             intensityVar.setCompression(true, true, 9);
         }
 
-        //if rearranging, the value is how much strain is redistributed per frame
+        // if rearranging, the value is how much strain is redistributed per frame
         std::vector<GeometryVector> rearrangingIntensity;
         rearrangingIntensity.resize(nSite);
         std::vector<int> rearrangeFrameLength(nSite, 0);
-        //for strain release caused by a block itself yielding, set this to 1, and softness of all other sites will be updated
-        //if strain release is just because a neighbor is rearranging, leave this as 0, softness update will be disabled
+        // for strain release caused by a block itself yielding, set this to 1, and softness of all other sites will be updated
+        // if strain release is just because a neighbor is rearranging, leave this as 0, softness update will be disabled
         std::vector<char> updateSoftness(nSite, 0);
 
         std::uniform_real_distribution<double> uDistribution(0.0, 1.0);
@@ -693,8 +724,8 @@ public:
             {
 #pragma omp single
                 {
-                    //if a site is rearranging, do nothing
-                    //otherwise, find out the site with the largest incentive, let it rearrange
+                    // if a site is rearranging, do nothing
+                    // otherwise, find out the site with the largest incentive, let it rearrange
                     int toRearrange = -1;
                     double maxIncentive = 0.0;
                     for (int i = 0; i < nSite; i++)
@@ -720,7 +751,7 @@ public:
                         std::vector<int> toReleaseStrain;
                         double sumTotalIntensity2 = 0.0;
 
-                        //we call this 'neighborList', but it includes not only neighbors but also rearranger itself
+                        // we call this 'neighborList', but it includes not only neighbors but also rearranger itself
                         for (auto n : neighborList)
                         {
                             if (uDistribution(rEngine) < n.strainReleaseProbability)
@@ -756,15 +787,16 @@ public:
                 }
 
 #pragma omp barrier
-                //rearrangement affect other sites parameters
+                // rearrangement affect other sites parameters
                 numRearrange = 0;
                 for (int i = 0; i < nSite; i++)
                 {
                     if (rearrangingStep[i] > 0)
                     {
-                        //update softness and strain
+                        // update softness and strain
                         int rx = i / nGridPerSide;
                         int ry = i % nGridPerSide;
+                        cumulativePlasticStrain[i].AddFrom(rearrangingIntensity[i]);
 #pragma omp for schedule(static)
                         for (int x = 0; x < nGridPerSide; x++)
                         {
@@ -780,7 +812,7 @@ public:
                                     yInBuffer += nGridPerSide;
                                 while (yInBuffer >= nGridPerSide)
                                     yInBuffer -= nGridPerSide;
-                                //alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
+                                // alle[x * nGridPerSide + y] += dEBuffer[xInBuffer * nGridPerSide + yInBuffer];
                                 GeometryVector &e = alle[x * nGridPerSide + y];
                                 double olde2 = e.Modulus2();
 
@@ -809,7 +841,7 @@ public:
                     if (numRearrange > 0)
                     {
                         avalancheHappened = true;
-                        //std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
+                        // std::cout << "num rearranger in this frame=" << numRearrange << std::endl;
 
                         if (outputPrefix != std::string(""))
                         {
@@ -819,11 +851,11 @@ public:
                             int framesAlreadyWritten = intensityVar.getDim(0).getSize();
                             int dim = 2;
                             std::vector<size_t> startp, countp;
-                            startp.push_back(framesAlreadyWritten); //start from the end of the previous frame
+                            startp.push_back(framesAlreadyWritten); // start from the end of the previous frame
                             for (int i = 0; i < dim; i++)
                                 startp.push_back(0);
                             startp.push_back(0);
-                            countp.push_back(1); //write one frame
+                            countp.push_back(1); // write one frame
                             for (int i = 0; i < dim; i++)
                                 countp.push_back(nGridPerSide);
                             countp.push_back(::MaxDimension);
@@ -836,7 +868,7 @@ public:
                     {
                         if (rearrangingStep[i] > 0)
                         {
-                            //rearrangement has a fixed number of steps
+                            // rearrangement has a fixed number of steps
                             rearrangingStep[i]++;
                             if (rearrangingStep[i] > rearrangeFrameLength[i])
                             {
@@ -870,8 +902,8 @@ inline bool fileExists(const std::string &name)
 }
 int main()
 {
-    //make sure that the compiler does not add blank space in class GeometryVector
-    //if the compiler does that, dumping may not work.
+    // make sure that the compiler does not add blank space in class GeometryVector
+    // if the compiler does that, dumping may not work.
     assert(sizeof(GeometryVector) == MaxDimension * sizeof(double));
 
     const std::string ncFileName = "dump.nc";
@@ -899,7 +931,8 @@ int main()
         model.shear(strain);
         totalExternalStrain += strain;
 
-        auto outputStrainFunc = [&]() -> void {
+        auto outputStrainFunc = [&]() -> void
+        {
             double sum = 0.0;
             for (auto s : model.alle)
                 sum += s.x[0];
@@ -920,10 +953,6 @@ int main()
 
         outputStrainFunc();
     }
-
-    // std::cout << "EMA target is:";
-    // for (auto a : model.movingAverageTarget)
-    //     std::cout << a << std::endl;
 
     return 0;
 }
