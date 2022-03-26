@@ -15,26 +15,26 @@ const double gridSideLength = 1.0;
 const double maxGlobalStrain = 0.1;
 
 // T=0.025
-const double meanSoftness = 14.82;
-const double stdSoftness = 3.11;
-const double yieldStressSigma = 0.0;
-const double d2minDecay = 0.612;
-const int nGridPerSide = 100;
-const double dsCenter = 0.0;
+// const double meanSoftness = 14.82;
+// const double stdSoftness = 3.11;
+// const double yieldStressSigma = 0.0;
+// const double d2minDecay = 0.612;
+// const int nGridPerSide = 100;
+// const double dsCenter = 0.0;
 // T=0.1
 // const double meanSoftness = 13.87;
 // const double stdSoftness = 4.35;
 // const double yieldStressSigma = 0.0;
 // const double d2minDecay = 0.554;
-// const int nGridPerSide = 253;
+// const int nGridPerSide = 252;
 // const double dsCenter=0.0;
 // T=0.2
-// const double meanSoftness = 12.09;
-// const double stdSoftness = 4.49;
-// const double yieldStressSigma = 0.0;
-// const double d2minDecay = 0.533;
-// const int nGridPerSide = 253;
-// const double dsCenter = 0.0;
+const double meanSoftness = 12.09;
+const double stdSoftness = 4.49;
+const double yieldStressSigma = 0.0;
+const double d2minDecay = 0.533;
+const int nGridPerSide = 252;
+const double dsCenter = 0.0;
 
 const double dSoftnessDStrain2 = -411;                           // average of T=0.025, 0.1, and 0.2
 const double cos2ThetaCoefficientPerRearrangingIntensity = 29.6; // average of T=0.025, 0.1, and 0.2
@@ -907,6 +907,7 @@ int main()
     assert(sizeof(GeometryVector) == MaxDimension * sizeof(double));
 
     const std::string ncFileName = "dump.nc";
+    const std::string initSoftnessFileName = "dump_sini.nc";
 
     int seed;
     std::cin >> seed;
@@ -920,6 +921,19 @@ int main()
     {
         model.openNewDumpFile(ncFileName);
         std::cout << "could not find netCDF dump file " << ncFileName << ", create a new one.\n";
+        if (fileExists(initSoftnessFileName))
+        {
+            std::cout << "initial softness file found. Initiate softness from " << initSoftnessFileName << std::endl;
+            netCDF::NcFile inputFile(initSoftnessFileName, netCDF::NcFile::read);
+            netCDF::NcVar readSVar = inputFile.getVar("softness");
+            std::vector<size_t> startp, countp;
+            int dim = 2;
+            for (int i = 0; i < dim; i++)
+                startp.push_back(0);
+            for (int i = 0; i < dim; i++)
+                countp.push_back(nGridPerSide);
+            readSVar.getVar(startp, countp, model.alls.data());
+        }
     }
 
     int numAvalanche = 0;
