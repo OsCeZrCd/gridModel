@@ -32,8 +32,11 @@ const double maxGlobalStrain = 0.1;
 const double meanSoftness = 12.09;
 const double stdSoftness = 4.49;
 const double yieldStressSigma = 0.0;
+//const double stdSoftness = 3.18;
+//const double yieldStressSigma = 3.08;
 const double d2minDecay = 0.533;
 const int nGridPerSide = 252;
+//const double dsCenter = 0.3206;
 const double dsCenter = 0.0;
 
 const double dSoftnessDStrain2 = -411;                           // average of T=0.025, 0.1, and 0.2
@@ -796,7 +799,6 @@ public:
                         // update softness and strain
                         int rx = i / nGridPerSide;
                         int ry = i % nGridPerSide;
-                        cumulativePlasticStrain[i].AddFrom(rearrangingIntensity[i]);
 #pragma omp for schedule(static)
                         for (int x = 0; x < nGridPerSide; x++)
                         {
@@ -868,6 +870,7 @@ public:
                     {
                         if (rearrangingStep[i] > 0)
                         {
+                            cumulativePlasticStrain[i].AddFrom(rearrangingIntensity[i]);
                             // rearrangement has a fixed number of steps
                             rearrangingStep[i]++;
                             if (rearrangingStep[i] > rearrangeFrameLength[i])
