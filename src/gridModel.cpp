@@ -14,37 +14,36 @@ const double modulus = 89; // measured by dividing mean yield stress with mean y
 const double gridSideLength = 1.0;
 const double maxGlobalStrain = 0.1;
 
+const double dSoftnessDStrain2 = -411;                           // average of T=0.025, 0.1, and 0.2
+const double cos2ThetaCoefficientPerRearrangingIntensity = 29.6; // average of T=0.025, 0.1, and 0.2
+const double restoreRange = 30.0;
+const double alpha = 0.77909;
+const double beta = -2.5; // eta(r)=alpha*r^(beta) for r>0
+const double emaMeanShift = 0.25336 / alpha;
+// for the center, e.g., r=0, separate values are used
+const double etaCenter = 0.36126;
+
 // T=0.025
 // const double meanSoftness = 14.82;
 // const double stdSoftness = 3.11;
 // const double yieldStressSigma = 0.0;
 // const double d2minDecay = 0.612;
 // const int nGridPerSide = 100;
-// const double dsCenter = 0.0;
+// const double emaMeanShiftCenter=4.6480/etaCenter;
 // T=0.1
 // const double meanSoftness = 13.87;
 // const double stdSoftness = 4.35;
 // const double yieldStressSigma = 0.0;
 // const double d2minDecay = 0.554;
 // const int nGridPerSide = 252;
-// const double dsCenter=0.0;
+// const double emaMeanShiftCenter=3.5751/etaCenter;
 // T=0.2
 const double meanSoftness = 12.09;
 const double stdSoftness = 4.49;
 const double yieldStressSigma = 0.0;
-//const double stdSoftness = 3.18;
-//const double yieldStressSigma = 3.08;
 const double d2minDecay = 0.533;
-const int nGridPerSide = 252;
-//const double dsCenter = 0.3206;
-const double dsCenter = 0.0;
-
-const double dSoftnessDStrain2 = -411;                           // average of T=0.025, 0.1, and 0.2
-const double cos2ThetaCoefficientPerRearrangingIntensity = 29.6; // average of T=0.025, 0.1, and 0.2
-const double restoreRange = 30.0;
-const double alpha = 0.77909;
-const double beta = -2.5;
-const double emaMeanShift = 0.25336 / alpha;
+const int nGridPerSide = 253;
+const double emaMeanShiftCenter = 3.2061 / etaCenter;
 
 template <typename T>
 void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
@@ -163,7 +162,6 @@ public:
 
         // calculate softnessChangeShift, which is a background softness change for every block assuming the rearranging intensity is 1.0
         double sumExpectedDs = 0.0;
-        sumExpectedDs += dsCenter;
         for (int i = 0; i < nGridPerSide; i++)
             for (int j = 0; j < nGridPerSide; j++)
             {
@@ -172,8 +170,11 @@ public:
                 double r = std::sqrt(dx * dx + dy * dy);
                 if (r < restoreRange)
                 {
-                    double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0);
-                    sumExpectedDs += softnessRestoringCoefficient * emaMeanShift;
+                    double softnessRestoringCoefficient = ((r > 0) ? alpha * std::pow(r, beta) : etaCenter);
+                    if (r > 0)
+                        sumExpectedDs += softnessRestoringCoefficient * emaMeanShift;
+                    else
+                        sumExpectedDs += softnessRestoringCoefficient * emaMeanShiftCenter;
                 }
             }
         // debug temp
@@ -337,18 +338,17 @@ public:
             meanContribution += cos2ThetaCoefficientPerRearrangingIntensity * rearrangingIntensity.x[0] * std::sin(2 * theta) / r / r;
             meanContribution += cos2ThetaCoefficientPerRearrangingIntensity * rearrangingIntensity.x[1] * std::cos(2 * theta) / r / r;
         }
-        else
-            meanContribution += dsCenter;
 
         meanContribution += intensityModulus * softnessChangeShift;
 
         if (r < restoreRange)
         {
             // this is eta from measured stddev of dS
-            double softnessRestoringCoefficient = alpha * ((r > 0) ? std::pow(r, beta) : 1.0) * intensityModulus;
+            double softnessRestoringCoefficient = ((r > 0) ? alpha * std::pow(r, beta) : etaCenter) * intensityModulus;
 
             int index = std::floor(r);
-            restore = softnessRestoringCoefficient * (movingAverageTarget[index] + emaMeanShift - s);
+            double c = (r > 0) ? emaMeanShift : emaMeanShiftCenter;
+            restore = softnessRestoringCoefficient * (movingAverageTarget[index] + c - s);
             movingAverageTarget[index] = 0.99 * movingAverageTarget[index] + 0.01 * s;
 
             double stddev = std::sqrt(softnessRestoringCoefficient * (2.0 - softnessRestoringCoefficient)) * stdSoftness;
