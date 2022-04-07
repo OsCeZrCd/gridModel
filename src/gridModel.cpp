@@ -947,11 +947,16 @@ int main()
         };
         outputStrainFunc();
 
-        std::stringstream ss;
-        ss << "avalanche_" << numAvalanche;
 
         bool avalanched;
-        avalanched = model.avalanche("");
+        if(dumpLevel>=15)
+        {
+            std::stringstream ss;
+            ss << "avalanche_" << numAvalanche;
+            avalanched = model.avalanche(ss.str());
+        }
+        else
+            avalanched = model.avalanche("");
 
         if (avalanched)
         {
