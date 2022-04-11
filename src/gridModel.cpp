@@ -680,10 +680,11 @@ public:
         int nStep = 0;
         netCDF::NcFile avalancheProcessDumpFile;
         netCDF::NcVar intensityVar;
+        netCDF::NcVar softnessVar;
 
         if (outputPrefix != std::string(""))
         {
-            avalancheProcessDumpFile.open(outputPrefix, netCDF::NcFile::replace);
+            avalancheProcessDumpFile.open(outputPrefix+".nc", netCDF::NcFile::replace);
             int dim = 2;
             std::vector<netCDF::NcDim> strainDims;
 
@@ -696,6 +697,10 @@ public:
                 netCDF::NcDim temp = avalancheProcessDumpFile.addDim(ss.str(), nGridPerSide);
                 strainDims.push_back(temp);
             }
+
+            softnessVar = avalancheProcessDumpFile.addVar("softness", netCDF::ncDouble, strainDims);
+            softnessVar.setCompression(true, true, 9);
+
             strainDims.push_back(avalancheProcessDumpFile.addDim("strainComponents", ::MaxDimension));
 
             intensityVar = avalancheProcessDumpFile.addVar("rearrangingIntensity", netCDF::ncDouble, strainDims);
@@ -846,17 +851,19 @@ public:
                         {
                             std::stringstream ss;
                             ss << outputPrefix << "_step_" << nStep;
-                            plot(this->rearrangingStep, nGridPerSide, ss.str());
+                            //plot(this->rearrangingStep, nGridPerSide, ss.str());
                             int framesAlreadyWritten = intensityVar.getDim(0).getSize();
                             int dim = 2;
                             std::vector<size_t> startp, countp;
                             startp.push_back(framesAlreadyWritten); //start from the end of the previous frame
                             for (int i = 0; i < dim; i++)
                                 startp.push_back(0);
-                            startp.push_back(0);
                             countp.push_back(1); //write one frame
                             for (int i = 0; i < dim; i++)
                                 countp.push_back(nGridPerSide);
+                            softnessVar.putVar(startp, countp, alls.data());
+
+                            startp.push_back(0);
                             countp.push_back(::MaxDimension);
                             intensityVar.putVar(startp, countp, rearrangingIntensity.data());
                         }
@@ -887,7 +894,7 @@ public:
         {
             std::stringstream ss;
             ss << outputPrefix;
-            plot(this->hasRearranged, nGridPerSide, ss.str());
+            //plot(this->hasRearranged, nGridPerSide, ss.str());
         }
         std::cout << "steps in this avalanche=" << nStep << std::endl;
         return avalancheHappened;
