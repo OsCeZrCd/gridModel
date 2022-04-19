@@ -330,7 +330,8 @@ public:
         double restore = 0.0;
         double harmonicDiffusion = 0.0;
 
-        double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
+        //double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
+        const double intensityModulus = 0.1;
 
         if (r != 0.0)
         {
