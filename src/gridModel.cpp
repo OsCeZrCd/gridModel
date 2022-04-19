@@ -49,52 +49,6 @@ const double stdSoftness = 2.0;
 const double dSoftnessDStrain2 = 101.3;
 //const double dSoftnessDStrain2 = 0.0;
 
-std::vector<double> numericalDsR =
-    {
-        0.90483741803596,
-        1.10517091807565,
-        1.349858807576,
-        1.64872127070013,
-        2.01375270747048,
-        2.45960311115695,
-        3.00416602394643,
-        3.66929666761924,
-        4.48168907033806,
-        5.4739473917272,
-        6.68589444227927,
-        8.16616991256765,
-        9.97418245481472,
-        12.1824939607035,
-        14.8797317248728,
-        18.1741453694431,
-        22.1979512814416,
-        27.1126389206579,
-        33.1154519586923,
-};
-
-std::vector<double> numericalDs =
-    {
-        0.115407163314733,
-        -0.157866369001493,
-        -0.122794150458982,
-        -0.0111312471488491,
-        -0.0123567435148076,
-        -0.0195800437378993,
-        -0.00140091760436869,
-        -0.00346197619971859,
-        0.000793079578640183,
-        0.00106809091953078,
-        0.00112736258290034,
-        0.00110702362832669,
-        0.000915153303260757,
-        0.000483591475874019,
-        0.000312333963820199,
-        0.000132837059034092,
-        4.22819533290796e-05,
-        8.57444728501887e-06,
-        1.17583919795709e-05,
-};
-
 class gridModel
 {
 public:
@@ -324,9 +278,12 @@ public:
         //if (r == 0.0)
         //    return 0.0; // delta S of the rearranger is processed separately
 
-        double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
-        //double softnessChangeShift2=(-1.0)*dSoftnessDStrain2*rearrangingIntensity.Modulus2()/nGridPerSide/nGridPerSide;
+        //double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
+        const double intensityModulus =0.1;//strain release per frame, measured from particle simulation
+
+        //deprecated parameter
         double softnessChangeShift2 = 0.0;
+        //double softnessChangeShift2=(-1.0)*dSoftnessDStrain2*rearrangingIntensity.Modulus2()/nGridPerSide/nGridPerSide;
 
         double meanContribution = 0.0;
         if (r < 30 && r > 0)
