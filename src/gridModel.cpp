@@ -638,6 +638,7 @@ public:
         netCDF::NcFile avalancheProcessDumpFile;
         netCDF::NcVar intensityVar;
         netCDF::NcVar softnessVar;
+        netCDF::NcVar rearrangeCenterVar;
 
         if (outputPrefix != std::string(""))
         {
@@ -654,6 +655,9 @@ public:
                 netCDF::NcDim temp = avalancheProcessDumpFile.addDim(ss.str(), nGridPerSide);
                 strainDims.push_back(temp);
             }
+
+            rearrangeCenterVar = avalancheProcessDumpFile.addVar("rearrangeCenter", netCDF::ncByte, strainDims);
+            rearrangeCenterVar.setCompression(true, true, 9);
 
             softnessVar = avalancheProcessDumpFile.addVar("softness", netCDF::ncDouble, strainDims);
             softnessVar.setCompression(true, true, 9);
@@ -819,6 +823,7 @@ public:
                             for (int i = 0; i < dim; i++)
                                 countp.push_back(nGridPerSide);
                             softnessVar.putVar(startp, countp, alls.data());
+                            rearrangeCenterVar.putVar(startp, countp, (void *)(updateSoftness.data()));
 
                             startp.push_back(0);
                             countp.push_back(::MaxDimension);
