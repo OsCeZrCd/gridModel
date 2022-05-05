@@ -122,7 +122,7 @@ public:
                 if (i != 0 || j != 0)
                 {
                     double r = std::sqrt(double(i) * i + j * j) * lGrid;
-                    double p = 0.897 * std::exp(-0.663 * r);
+                    double p = std::exp(-1.0 * r / 1.40179);
                     neighborList.push_back(neighborRelease(i, j, p));
                     sumP += p;
                 }
@@ -279,7 +279,7 @@ public:
         //    return 0.0; // delta S of the rearranger is processed separately
 
         //double intensityModulus = std::sqrt(rearrangingIntensity.Modulus2());
-        const double intensityModulus =0.1;//strain release per frame, measured from particle simulation
+        const double intensityModulus = 0.1; //strain release per frame, measured from particle simulation
 
         //deprecated parameter
         double softnessChangeShift2 = 0.0;
@@ -642,7 +642,7 @@ public:
 
         if (outputPrefix != std::string(""))
         {
-            avalancheProcessDumpFile.open(outputPrefix+".nc", netCDF::NcFile::replace);
+            avalancheProcessDumpFile.open(outputPrefix + ".nc", netCDF::NcFile::replace);
             int dim = 2;
             std::vector<netCDF::NcDim> strainDims;
 
@@ -895,7 +895,7 @@ int main()
 
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
-    strainFile<<std::setprecision(9);
+    strainFile << std::setprecision(9);
     double totalExternalStrain = 0.0;
     double strainOverStep = 1e-10;
     while (totalExternalStrain < maxExternalStrain)
@@ -904,8 +904,7 @@ int main()
         model.shear(strain);
         totalExternalStrain += strain;
 
-        auto outputStrainFunc = [&]() -> void
-        {
+        auto outputStrainFunc = [&]() -> void {
             double sum = 0.0, sum2 = 0.0;
             for (auto s : model.alle)
             {
@@ -916,9 +915,8 @@ int main()
         };
         outputStrainFunc();
 
-
         bool avalanched;
-        if(dumpLevel>=15)
+        if (dumpLevel >= 15)
         {
             std::stringstream ss;
             ss << "avalanche_" << numAvalanche;
