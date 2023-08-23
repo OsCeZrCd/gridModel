@@ -19,7 +19,7 @@ const double cos2ThetaCoefficientPerRearrangingIntensity = 29.6; // average of T
 const double restoreRange = 30.0;
 const double alpha = 0.77909;
 const double beta = -2.5; // eta(r)=alpha*r^(beta) for r>0
-const double emaMeanShift = 0.25336 / alpha;
+const double emaMeanShift = 1*2.5336 / alpha;
 // for the center, e.g., r=0, separate values are used
 const double etaCenter = 0.36126;
 
