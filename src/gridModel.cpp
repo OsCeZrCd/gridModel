@@ -10,8 +10,88 @@
 #include "mgl2/mgl.h"
 #include <netcdf>
 
-const double meanSoftness = -0.085;
-const double stdSoftness = 0.783;
+template <typename T>
+void plot(const std::vector<T> &data, int nGridPerSide, std::string file)
+{
+    // mglData x(nGridPerSide, nGridPerSide);
+    // for (int i = 0; i < nGridPerSide; i++)
+    // {
+    //     for (int j = 0; j < nGridPerSide; j++)
+    //     {
+    //         mreal a = 0.0;
+    //         if (data[i * nGridPerSide + j] > 0)
+    //             a = 1.0;
+    //         else if (i + 1 != nGridPerSide && data[(i + 1) * nGridPerSide + j] > 0)
+    //             a = std::max(0.5, a);
+    //         else if (i - 1 != -1 && data[(i - 1) * nGridPerSide + j] > 0)
+    //             a = std::max(0.5, a);
+    //         else if (j + 1 != nGridPerSide && data[i * nGridPerSide + j + 1] > 0)
+    //             a = std::max(0.5, a);
+    //         else if (j - 1 != -1 && data[i * nGridPerSide + j - 1] > 0)
+    //             a = std::max(0.5, a);
+    //         x.SetVal(a, i, j);
+    //     }
+    //     //std::cout<<std::endl;
+    // }
+    // mglGraph gr;
+    // gr.SetSize(1600, 1600);
+    // //gr.Aspect(0.75, 1.0);
+    // //gr.Colorbar(">kbcyr");
+    // gr.Tile(x, "bckyr");
+    // gr.WritePNG((file + std::string(".png")).c_str());
+}
+
+const double meanSoftness = -0.04;
+const double stdSoftness = 0.697;
+
+// below not used
+std::vector<double> numericalDsR =
+    {
+        0.90483741803596,
+        1.10517091807565,
+        1.349858807576,
+        1.64872127070013,
+        2.01375270747048,
+        2.45960311115695,
+        3.00416602394643,
+        3.66929666761924,
+        4.48168907033806,
+        5.4739473917272,
+        6.68589444227927,
+        8.16616991256765,
+        9.97418245481472,
+        12.1824939607035,
+        14.8797317248728,
+        18.1741453694431,
+        22.1979512814416,
+        27.1126389206579,
+        33.1154519586923,
+};
+
+std::vector<double> numericalDs =
+    {
+        0.115407163314733,
+        -0.157866369001493,
+        -0.122794150458982,
+        -0.0111312471488491,
+        -0.0123567435148076,
+        -0.0195800437378993,
+        -0.00140091760436869,
+        -0.00346197619971859,
+        0.000793079578640183,
+        0.00106809091953078,
+        0.00112736258290034,
+        0.00110702362832669,
+        0.000915153303260757,
+        0.000483591475874019,
+        0.000312333963820199,
+        0.000132837059034092,
+        4.22819533290796e-05,
+        8.57444728501887e-06,
+        1.17583919795709e-05,
+};
+
+// above not used
 
 class gridModel
 {
@@ -178,11 +258,11 @@ public:
     {
         double s = alls[i];
 
-        double meanYieldStrain = 0.01336 - 0.0006109 * s;
+        double meanYieldStrain = 0.01176 - 0.002451 * s;
         // double meanYieldStrain = 0.01249 - 0.002088 * s;
         //weibull distribution
         // double k = 1.6 + 0.4 * s ;
-        double k = 1.85;
+        double k = 2.1;
         // double k = 5.5;
 
         double lambda = meanYieldStrain / std::tgamma(1.0 + 1.0 / k);
@@ -216,93 +296,90 @@ public:
 
     double dsFromRearranger(double dx, double dy, double r, double s, const GeometryVector & rearrangingIntensity, std::mt19937 &engine, double meansneb, double emodold, double emodnew, int restep)
     {
-        // const double angularContributionCoefficient=0.6044;
-        const double angularContributionCoefficient=2.371*2.0;
-        // const double angularContributionCoefficient=1.6;
-        // if (r == 0.0)
-            // return 0.0; // delta S of the rearranger is processed separately
+      // const double angularContributionCoefficient=0.6044;
+      const double angularContributionCoefficient=1.741*2.0;
+      // const double angularContributionCoefficient=1.6;
+      // if (r == 0.0)
+          // return 0.0; // delta S of the rearranger is processed separately
 
-        double meanContribution = 0.0;
-        if (r==0)
-        {
-            meanContribution = 0.008481 -0.0000074200443;
-            // meanContribution = -0.03235 -  0.0001148364449;
-        }
-        // else if (r < 30)
-        else
-        {
-            // meanContribution += 0.0;
-            // meanContribution += 0.001015*std::exp(-r/24.78) + 0.0 -  0.00020392;
-            // meanContribution += 0.00469 *std::pow(r, -1.05) + 0.0 - 0.000117120888;
-            meanContribution += 0.008481 * std::exp(-r/1.395)-0.0000074200443;
-            //contribution from volumetric strain
-            meanContribution -= angularContributionCoefficient * rearrangingIntensity.x[0] / r / r * ( - 0.0 * std::cos(4.0 * std::atan2(dy, dx)) +  std::sin(2.0 * std::atan2(dy, dx))) / 3.0;
-            meanContribution -= angularContributionCoefficient * rearrangingIntensity.x[1] / r / r * (  0.0 * std::cos(4.0 * std::atan2(dy, dx)) +   std::cos(2.0 * std::atan2(dy, dx))) / 3.0;
-        }
-        // else {
-        //     meanContribution = 0.0;
-        // }
+      double meanContribution = 0.0;
+      if (r==0)
+      {
+          // meanContribution = 0.0;
+          // meanContribution = -0.05221 -  0.0000771860657566;
+          meanContribution = 0.1125-0.0000235396432117;
+      }
+      // else if (r < 30)
+      else
+      {
+          // meanContribution += 0.0;
+          // meanContribution += 0.1717*std::exp(-r/0.6402) - 0.000186 +  0.00016645;
+          // meanContribution += 0.05752 *std::pow(r, -3.1) -  0.000034202094;
+          meanContribution += 0.1125 * std::exp(-r/0.6465)-0.0000235396432117;
+          //contribution from volumetric strain
+          meanContribution -= angularContributionCoefficient * rearrangingIntensity.x[0] / r / r * ( - 0.0 * std::cos(4.0 * std::atan2(dy, dx)) +  std::sin(2.0 * std::atan2(dy, dx))) / 3.0;
+          meanContribution -= angularContributionCoefficient * rearrangingIntensity.x[1] / r / r * (  0.0 * std::cos(4.0 * std::atan2(dy, dx)) +   std::cos(2.0 * std::atan2(dy, dx))) / 3.0;
+      }
+      // else {
+      //     meanContribution = 0.0;
+      // }
 
-        // const double alpha = 0.03434, beta = -1.05;
-        const double alpha = 0.1;
-        double restore = 0.0;
-        double softnessRestoringCoefficient = 0;
-        if (r > 0 && r < 15)
-        {
-            // softnessRestoringCoefficient = alpha * std::pow(r, beta);
-            softnessRestoringCoefficient = alpha*std::exp(-r/1.395);
-            // restore = softnessRestoringCoefficient * (this->meanS_ins - s);
-            restore = softnessRestoringCoefficient * (meansneb - s);
-        }
+      // const double alpha = 0.01, beta = -3.1;
+      const double alpha = 0.0931;
+      double restore = 0.0;
+      double softnessRestoringCoefficient = 0;
+      if (r > 0 && r < 15)
+      {
+          // softnessRestoringCoefficient = alpha * std::pow(r, beta);
+          // softnessRestoringCoefficient = alpha * std::pow(r, beta);
+          softnessRestoringCoefficient = alpha*std::exp(-r/0.6465);
+          restore = softnessRestoringCoefficient * (meansneb - s);
+      }
 
-        if (r==0)
-        {
-           // restore = 0.0923 * (this->meanS_ins - s);
-           restore = alpha * (meansneb - s);
-           softnessRestoringCoefficient = alpha;
-        }
-        // else if (r < 20)
-        // {
-        //     double softnessRestoringCoefficient = -1e-5;
-        //     restore = softnessRestoringCoefficient * (meanSoftness - s);
-        // }
+      if (r==0)
+      {
+         // restore = 0.0923 * (this->meanS_ins - s);
+         restore = alpha * (meansneb - s);
+         softnessRestoringCoefficient = alpha;
+      }
+      // else if (r < 20)
+      // {
+      //     double softnessRestoringCoefficient = -1e-5;
+      //     restore = softnessRestoringCoefficient * (meanSoftness - s);
+      // }
 
-        double harmonicDiffusion = 0.0;
-        if (r > 0 && r < 15)
-        {
-            double rcoefficient = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient)*this->S_std_ins*this->S_std_ins);
-            std::normal_distribution<double> noiseDistribution(0.0, rcoefficient);
-            harmonicDiffusion = noiseDistribution(engine);
-        }
+      double harmonicDiffusion = 0.0;
+      if (r > 0 && r < 15)
+      {
+          double rcoefficient = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient)*this->S_std_ins*this->S_std_ins);
+          std::normal_distribution<double> noiseDistribution(0.0, rcoefficient);
+          harmonicDiffusion = noiseDistribution(engine);
+      }
 
-        if (r == 0)
-        {
-            double rcoefficient = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient)*this->S_std_ins*this->S_std_ins);
-            std::normal_distribution<double> noiseDistribution(0.0, rcoefficient);
-            harmonicDiffusion = noiseDistribution(engine);
-        }
+      if (r == 0)
+      {
+          double rcoefficient = std::sqrt(softnessRestoringCoefficient*(2.0-softnessRestoringCoefficient)*this->S_std_ins*this->S_std_ins);
+          std::normal_distribution<double> noiseDistribution(0.0, rcoefficient);
+          harmonicDiffusion = noiseDistribution(engine);
+      }
 
-        // deviatoric strain effect
-        double ds_devia = 0;
-        // if (r>=0)
-        // {
-        // double strain_energy_diff = std::sqrt(emodnew) - std::sqrt(emodold);
-        // ds_devia = strain_energy_diff * 1.26;
+      // deviatoric strain effect
+      double ds_devia = 0;
+      // if (r>=0)
+      // {
+      double strain_energy_diff = (emodnew) - (emodold);
+      ds_devia = strain_energy_diff * 339;
+      // }
 
-        double strain_energy_diff = (emodnew) - (emodold);
-        ds_devia = strain_energy_diff * 138.9;
-
-        // }
-
-        double delta_s = 0;
-        if (restep == 1)
-        {
-          delta_s = meanContribution + restore + harmonicDiffusion + ds_devia;
-        } else if (restep == 2)
-        {
-          delta_s = ds_devia;
-        }
-        return delta_s;
+      double delta_s = 0;
+      if (restep == 1)
+      {
+        delta_s = meanContribution + restore + harmonicDiffusion + ds_devia;
+      } else if (restep == 2)
+      {
+        delta_s = ds_devia;
+      }
+      return delta_s;
     }
 
     void getBuffer()
@@ -492,6 +569,7 @@ public:
         //         temp[index]=dEBuffer[1][index].x[1];
         //     }
         // }
+        // plot(temp, nGridPerSide, "e11");
         // exit(0);
     }
     void allocate()
@@ -650,11 +728,11 @@ public:
             this->alle_0[i].x[0] = this->alle[i].x[0];
             this->alle_0[i].x[1] = this->alle[i].x[1];
             this->alle[i].x[0] += strain;
-            // double strain_energy_diff = std::sqrt(this->alle[i].x[0] * this->alle[i].x[0] + this->alle[i].x[1] * this->alle[i].x[1]) - std::sqrt((this->alle_0[i].x[0] * this->alle_0[i].x[0] + this->alle_0[i].x[1] * this->alle_0[i].x[1]));
-            // this->alls[i] += strain_energy_diff * 1.26 + strain * 0.714/3.0; //0.427
-
+            // double strain_energy_diff = this->alle[i].x[0] * this->alle[i].x[0] + this->alle[i].x[1] * this->alle[i].x[1]  - (this->alle_0[i].x[0] * this->alle_0[i].x[0] + this->alle_0[i].x[1] * this->alle_0[i].x[1] );
             double strain_energy_diff = (this->alle[i].x[0] * this->alle[i].x[0] + this->alle[i].x[1] * this->alle[i].x[1]) - ((this->alle_0[i].x[0] * this->alle_0[i].x[0] + this->alle_0[i].x[1] * this->alle_0[i].x[1]));
-            this->alls[i] += strain_energy_diff * 138.9 + strain * 2.0*2.371/3.0;
+            // double strain_energy_diff = std::sqrt(this->alle[i].x[0] * this->alle[i].x[0] + this->alle[i].x[1] * this->alle[i].x[1]) - std::sqrt((this->alle_0[i].x[0] * this->alle_0[i].x[0] + this->alle_0[i].x[1] * this->alle_0[i].x[1]));
+            // this->alls[i] += strain_energy_diff * 1.094 + strain * 0.3223;
+            this->alls[i] += strain_energy_diff * 339.0 + strain * 1.741*2.0/3.0; //0.427
 
             // this->alls[i] += strain * 1.5;
             this->hasRearranged[i] = 0;
@@ -687,7 +765,7 @@ public:
                 threadEngine.seed(rEngine());
             }
             int numRearrange = 1;
-            while (numRearrange > 0)
+            while (numRearrange > 0 && numRearrange < 4000)
             {
 #pragma omp single
                 {
@@ -742,17 +820,12 @@ public:
                                   int ind_neb = neby + nebx * nGridPerSide;
                                   double prob = this->Nebreprob(this->nebEngine);
                                   double r_neb = std::sqrt( (double)ix * (double)ix + (double)iy * (double)iy);
-                                  // double neb_prob = std::exp(-r_neb/1.0);
-                                  // double coeffA = 0.568 * std::exp( 0.2711 * this->alls[ind_neb]);
-                                  // //double coeffA = 0.02629 * this->alls[ind_neb] + 0.3986;
-                                  // //double coeffB = 0.239 * this->alls[ind_neb] + 1.316;
-                                  // double coeffB = -0.0197 * this->alls[ind_neb] + 0.7146;
+                                  // double coeffA = 0.6884 * std::exp( 0.311 * this->alls[ind_neb]);
+                                  // double coeffA = 2.6884 * std::exp( 0.311 * this->alls[ind_neb]);
+                                  // double coeffB = -0.09 * this->alls[ind_neb] + 1.002;
                                   // coeffB = std::max(coeffB, 0.0000001);
-                                  //
-                                  // double neb_prob = coeffA * std::exp(- r_neb * coeffB);
-                                  // // neb_prob = neb_prob / 2.0;
-
-                                  double neb_prob = 1.0 * std::exp(- r_neb / 1.13);
+                                  double neb_prob = 1.0 * std::exp(- r_neb / 1.12);
+                                  // neb_prob = neb_prob / 2.0;
 
                                  if (prob < neb_prob)
                                  {
@@ -1015,10 +1088,16 @@ public:
                         std::cout << ", mean s=" << sum / alls.size() << ", std s=" << this->S_std_ins;
                         std::cout << std::endl;
 
+                        // if (sum / alls.size()>4.0)
+                        // {
+                        //   numRearrange = 0;
+                        // }
+
                         if (outputPrefix != std::string(""))
                         {
                             std::stringstream ss;
                             ss << outputPrefix << "_step_" << (nStep++);
+                            // plot(this->rearrangingStep, nGridPerSide, ss.str());
                         }
                     }
                 }
@@ -1063,7 +1142,8 @@ int main()
     int numAvalanche = 0;
     std::fstream strainFile("xyStrain.txt", std::fstream::out);
     double totalExternalStrain = 0.0;
-    while (totalExternalStrain < 0.035 && !fileExists("stop.txt"))
+    double meanS = 0.0;
+    while (totalExternalStrain < 0.05 && !fileExists("stop.txt") && meanS < 4.0)
     {
         double strain = model.minimumXyStrainDistanceToRarranging() + 1e-10;
         // double strain = 0.000001;
@@ -1076,6 +1156,11 @@ int main()
         bool avalanched;
         avalanched = model.avalanche("");
 
+        double sumS_loop = 0.0;
+        for (auto s: model.alls)
+            sumS_loop += s;
+        meanS = sumS_loop/model.alls.size();
+
         auto outputStrainFunc = [&]() -> void {
             double sum = 0.0;
             for (auto s : model.alle)
@@ -1083,6 +1168,7 @@ int main()
             double sumS = 0.0;
             for (auto s: model.alls)
                 sumS += s;
+
             if (avalanched)
             {
               strainFile << totalExternalStrain << ' ' << sum / model.alle.size() << ' ' << sumS/model.alls.size() << ' ' << 1.0 << std::endl;
@@ -1092,6 +1178,8 @@ int main()
             }
         };
         // outputStrainFunc();
+
+
 
         if (avalanched)
         {
