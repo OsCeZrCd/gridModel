@@ -2,5 +2,6 @@ grid simulations for shear-banding phenomenon
 
 The code in branch "strainConserved" correspond to the model described in paper "Phys. Rev. Research 4, 043026 (2022)".
 The code in branch "misaki" correspond to model I described in "Machine learning-informed structuro-elastoplasticity predicts ductility of disordered solids" published in PNAS (2023).
+The code in branch "System IIA" and "System IIB" correspond to model IIA and IIB described in "Machine learning-informed structuro-elastoplasticity predicts ductility of disordered solids" published in PNAS (2023).
 The code in branch "System III" correspond to model III described in "Machine learning-informed structuro-elastoplasticity predicts ductility of disordered solids" published in PNAS (2023).
 
